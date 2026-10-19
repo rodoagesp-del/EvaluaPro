@@ -206,6 +206,13 @@ function generarPDFDocente(codigoSala, resultados, examen) {
   doc.save(`Examenes_Calificados_Sala_${codigoSala}.pdf`);
 }
 
+// Variables para control de paginación y tiempo individual
+let currentQuestionIndex = 0;
+let timePerQuestion = 0;
+let totalQuestions = 0;
+let resTempMinutos = 0;
+let temporalRespuestas = {};
+
 // ===== ALUMNO =====
 async function loginStudent() {
   const name = document.getElementById('student-name').value.trim();
@@ -218,66 +225,144 @@ async function loginStudent() {
 
   if (res && res.status === 'success') {
     currentStudentName = name; currentRoomCode = code; currentExamData = res.examen;
-    timeRemaining = parseInt(res.minutos) * 60;
+    resTempMinutos = res.minutos; // Guardamos los minutos totales
     startExam();
   } else alert("Sala inactiva.");
 }
 
 function startExam() {
   document.getElementById('display-student').innerText = currentStudentName;
+  
+  // Dividir el tiempo total en partes iguales (minutos a segundos)
+  totalQuestions = currentExamData.length;
+  const totalSeconds = parseInt(resTempMinutos) * 60; 
+  timePerQuestion = Math.floor(totalSeconds / totalQuestions);
+  
+  currentQuestionIndex = 0;
+  temporalRespuestas = {}; // Reiniciar respuestas
+  
+  showView('view-exam');
+  renderCurrentQuestion();
+}
+
+function renderCurrentQuestion() {
   const container = document.getElementById('student-questions-container');
   container.innerHTML = '';
-
-  currentExamData.forEach(q => {
-    container.innerHTML += `
-      <div class="question-item">
-        <h4>${q.id}. ${q.texto}</h4>
-        <label class="option-label"><input type="radio" name="resp_${q.id}" value="A"> A) ${q.opciones.A}</label>
-        <label class="option-label"><input type="radio" name="resp_${q.id}" value="B"> B) ${q.opciones.B}</label>
-        <label class="option-label"><input type="radio" name="resp_${q.id}" value="C"> C) ${q.opciones.C}</label>
-        <label class="option-label"><input type="radio" name="resp_${q.id}" value="D"> D) ${q.opciones.D}</label>
-      </div>`;
-  });
-
-  showView('view-exam');
   
+  // Limpiar temporizador de la pregunta anterior y arrancar el nuevo
+  clearInterval(timerInterval);
+  timeRemaining = timePerQuestion;
+  updateTimerDisplay();
+
+  const q = currentExamData[currentQuestionIndex];
+  
+  // Actualizar Barra de Progreso
+  const progressPercent = ((currentQuestionIndex + 1) / totalQuestions) * 100;
+  document.getElementById('exam-progress').style.width = `${progressPercent}%`;
+
+  const opciones = q.opciones || {};
+
+  container.innerHTML = `
+    <div class="question-container active">
+      <h4 style="color: var(--accent); margin-bottom: 15px;">Pregunta ${currentQuestionIndex + 1} de ${totalQuestions}</h4>
+      <p style="font-size: 18px; margin-bottom: 20px;"><strong>${q.texto}</strong></p>
+      
+      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="A" style="display:none;"> A) ${opciones.A || ''}</label>
+      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="B" style="display:none;"> B) ${opciones.B || ''}</label>
+      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="C" style="display:none;"> C) ${opciones.C || ''}</label>
+      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="D" style="display:none;"> D) ${opciones.D || ''}</label>
+    </div>`;
+
+  // Mostrar el botón "Siguiente" o "Finalizar" según corresponda
+  if (currentQuestionIndex < totalQuestions - 1) {
+    document.getElementById('btn-next-question').style.display = 'block';
+    document.getElementById('btn-finish-exam').style.display = 'none';
+  } else {
+    document.getElementById('btn-next-question').style.display = 'none';
+    document.getElementById('btn-finish-exam').style.display = 'block';
+  }
+
+  // Cuenta regresiva individual
   timerInterval = setInterval(() => {
     timeRemaining--;
-    let m = Math.floor(timeRemaining / 60);
-    let s = timeRemaining % 60;
-    document.getElementById('timer').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
-    if (timeRemaining <= 0) finishExam();
+    updateTimerDisplay();
+    
+    // Si se acaba el tiempo de esta pregunta
+    if (timeRemaining <= 0) {
+      clearInterval(timerInterval);
+      if (currentQuestionIndex < totalQuestions - 1) {
+        nextQuestion(); // Obliga a pasar a la siguiente pregunta
+      } else {
+        finishExam(); // Obliga a enviar el examen si es la última
+      }
+    }
   }, 1000);
+}
+
+function updateTimerDisplay() {
+  let m = Math.floor(timeRemaining / 60);
+  let s = timeRemaining % 60;
+  document.getElementById('timer').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+// Resaltar visualmente la opción seleccionada por el alumno
+function selectOption(labelElement) {
+  const container = document.getElementById('student-questions-container');
+  const labels = container.querySelectorAll('.option-label');
+  labels.forEach(l => {
+    l.classList.remove('selected');
+    l.style.backgroundColor = '#fff';
+    l.style.borderColor = '#ccc';
+  });
+  
+  labelElement.classList.add('selected');
+  labelElement.querySelector('input').checked = true;
+}
+
+function nextQuestion() {
+  // Guardar la respuesta marcada antes de avanzar
+  const q = currentExamData[currentQuestionIndex];
+  const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
+  temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
+
+  currentQuestionIndex++;
+  renderCurrentQuestion();
 }
 
 async function finishExam() {
   clearInterval(timerInterval);
-  let respuestas = {};
+  
+  // Guardar la respuesta de la última pregunta en pantalla
+  const q = currentExamData[currentQuestionIndex];
+  const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
+  temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
+
   let puntaje = 0;
 
-  currentExamData.forEach(q => {
-    const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
-    const valor = seleccion ? seleccion.value : "Sin responder";
-    respuestas[q.id] = valor;
-    if (valor === q.correcta) puntaje += 4; 
+  // Evaluar las respuestas acumuladas vs la clave
+  currentExamData.forEach(pregunta => {
+    const valor = temporalRespuestas[pregunta.id];
+    if (valor === pregunta.correcta) puntaje += 4; 
   });
 
   showLoader(true);
   const res = await postData({
     action: 'enviar_examen', codigoSala: currentRoomCode,
-    nombreAlumno: currentStudentName, respuestas: respuestas, puntaje: puntaje
+    nombreAlumno: currentStudentName, respuestas: temporalRespuestas, puntaje: puntaje
   });
   showLoader(false);
 
   if (res && res.status === 'success') {
-    // Guardar para referencia interna
+    // Guardar variables globales para el PDF o referencias
     myLastPuntaje = puntaje;
-    myLastRespuestas = respuestas;
+    myLastRespuestas = temporalRespuestas;
     
     // Mostrar nota gigante
     document.getElementById('final-score-number').innerText = puntaje;
     showView('view-result');
-  } else alert("Error al enviar.");
+  } else {
+    alert("Error al enviar su evaluación. Intente nuevamente.");
+  }
 }
 
 // ===== DESCARGA DE EXAMEN EN BLANCO =====
