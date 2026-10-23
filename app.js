@@ -5,6 +5,11 @@ let currentStudentName = '', currentRoomCode = '', currentExamData = [];
 let timeRemaining = 0, timerInterval;
 let myLastPuntaje = 0, myLastRespuestas = {};
 
+// ===== ESTADO DEL JUEGO (PARA PENALIZACIONES) =====
+let gameState = {
+  penalidadTrampa: 0
+};
+
 // ===== SISTEMA DE TEMÁTICAS ESTACIONALES =====
 function applySeasonalTheme() {
   const month = new Date().getMonth() + 1; // Enero es 1, Octubre 10, Diciembre 12
@@ -213,6 +218,10 @@ let totalQuestions = 0;
 let resTempMinutos = 0;
 let temporalRespuestas = {};
 
+// ===== NUEVAS VARIABLES ANTI-TRAMPA =====
+let cheatWarnings = 0;
+let isExamActive = false;
+
 // ===== ALUMNO =====
 async function loginStudent() {
   const name = document.getElementById('student-name').value.trim();
@@ -240,6 +249,11 @@ function startExam() {
   
   currentQuestionIndex = 0;
   temporalRespuestas = {}; // Reiniciar respuestas
+  
+  // INICIAR VIGILANCIA ANTI-TRAMPA
+  cheatWarnings = 0;
+  isExamActive = true;
+  gameState.penalidadTrampa = 0; // Reiniciar penalizaciones
   
   showView('view-exam');
   renderCurrentQuestion();
@@ -331,6 +345,7 @@ function nextQuestion() {
 
 async function finishExam() {
   clearInterval(timerInterval);
+  isExamActive = false; // DETENER VIGILANCIA ANTI-TRAMPA
   
   // Guardar la respuesta de la última pregunta en pantalla
   const q = currentExamData[currentQuestionIndex];
@@ -344,6 +359,14 @@ async function finishExam() {
     const valor = temporalRespuestas[pregunta.id];
     if (valor === pregunta.correcta) puntaje += 4; 
   });
+
+  // Aplicar las penalizaciones acumuladas por trampa
+  if (gameState.penalidadTrampa) {
+      puntaje += gameState.penalidadTrampa;
+  }
+
+  // Asegurar que el puntaje no sea negativo
+  if (puntaje < 0) puntaje = 0;
 
   showLoader(true);
   const res = await postData({
@@ -443,6 +466,55 @@ function generarPDFExamenBlanco(codigoSala, examen) {
   });
 
   doc.save(`Examen_Blanco_Sala_${codigoSala}.pdf`);
+}
+
+// ===== MOTOR ANTI-TRAMPAS (ACTUALIZADO CON PENALIZACIÓN Y SALTO) =====
+// 1. Detectar si minimiza o cambia de pestaña
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && isExamActive) {
+    handleCheatWarning("Cambiaste de pestaña o minimizaste el navegador.");
+  }
+});
+
+// 2. Detectar si abre otra app en pantalla dividida o pierde el foco
+window.addEventListener("blur", () => {
+  if (isExamActive) {
+    handleCheatWarning("Saliste de la pantalla de la evaluación.");
+  }
+});
+
+// 3. Bloqueos de teclado y mouse (solo activos durante el examen)
+document.addEventListener('contextmenu', event => { if(isExamActive) event.preventDefault(); });
+document.addEventListener('copy', event => { if(isExamActive) event.preventDefault(); });
+document.addEventListener('paste', event => { if(isExamActive) event.preventDefault(); });
+
+function handleCheatWarning(motivo) {
+  cheatWarnings++;
+  
+  // Guardar la pregunta en la que hizo trampa con un valor de infracción
+  const qActual = currentExamData[currentQuestionIndex];
+  temporalRespuestas[qActual.id] = "ANULADA (Infracción)";
+
+  // Sumar 2 puntos negativos al contador de ruido/infracción general (para restarlo al final)
+  if (!gameState.penalidadTrampa) gameState.penalidadTrampa = 0;
+  gameState.penalidadTrampa -= 2;
+
+  if (cheatWarnings >= 3) {
+    alert(`¡INFRACCIÓN CRÍTICA!\nMotivo: ${motivo}\n\nHas superado el límite de 2 advertencias permitidas. Tu evaluación ha sido cancelada.\nSe han descontado 2 puntos adicionales por esta infracción.`);
+    finishExam(); // Fuerza el envío inmediato
+  } else {
+    alert(`¡ADVERTENCIA ANTI-TRAMPA (${cheatWarnings}/2)!\nMotivo: ${motivo}\n\nEstá prohibido salir de la ventana de la evaluación. La pregunta actual ha sido anulada y se han restado 2 puntos de tu calificación global.`);
+    
+    // Forzar el salto a la siguiente pregunta si no es la última
+    if (currentQuestionIndex < totalQuestions - 1) {
+      clearInterval(timerInterval);
+      currentQuestionIndex++;
+      renderCurrentQuestion();
+    } else {
+      // Si hizo trampa en la última pregunta y aún le quedaban strikes, igual finaliza
+      finishExam();
+    }
+  }
 }
 
 // Registro PWA
