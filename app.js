@@ -71,16 +71,53 @@ function renderQuestionsForm() {
     container.innerHTML += `
       <div class="q-block">
         <h4>Pregunta ${i}</h4>
-        <input type="text" id="q${i}-text" placeholder="Pregunta" required>
-        <input type="text" id="q${i}-oA" placeholder="A)" required>
-        <input type="text" id="q${i}-oB" placeholder="B)" required>
-        <input type="text" id="q${i}-oC" placeholder="C)" required>
-        <input type="text" id="q${i}-oD" placeholder="D)" required>
-        <select id="q${i}-correct" required>
-          <option value="A">Clave: A</option><option value="B">Clave: B</option>
-          <option value="C">Clave: C</option><option value="D">Clave: D</option>
+        <select id="q${i}-type" onchange="toggleQuestionType(${i})" class="mb-2 font-bold text-indigo-700 bg-indigo-50">
+          <option value="multiple">Opción Múltiple</option>
+          <option value="text">Respuesta Abierta (Texto)</option>
         </select>
+        
+        <input type="text" id="q${i}-text" placeholder="Texto de la Pregunta" required>
+        
+        <!-- Opciones para Opción Múltiple -->
+        <div id="q${i}-multiple-options">
+          <input type="text" id="q${i}-oA" placeholder="A)" required>
+          <input type="text" id="q${i}-oB" placeholder="B)" required>
+          <input type="text" id="q${i}-oC" placeholder="C)" required>
+          <input type="text" id="q${i}-oD" placeholder="D)" required>
+          <select id="q${i}-correct" required>
+            <option value="A">Clave: A</option><option value="B">Clave: B</option>
+            <option value="C">Clave: C</option><option value="D">Clave: D</option>
+          </select>
+        </div>
+        
+        <!-- Mensaje para Respuesta Abierta -->
+        <div id="q${i}-text-options" class="hidden">
+          <p class="text-sm text-gray-600 italic mb-2">El alumno responderá con un cuadro de texto. Esta pregunta debe ser revisada manualmente por el docente en el PDF.</p>
+        </div>
       </div>`;
+  }
+}
+
+// Nueva función para alternar la vista del creador de preguntas
+function toggleQuestionType(index) {
+  const type = document.getElementById(`q${index}-type`).value;
+  const multipleDiv = document.getElementById(`q${index}-multiple-options`);
+  const textDiv = document.getElementById(`q${index}-text-options`);
+  
+  if (type === 'text') {
+    multipleDiv.classList.add('hidden');
+    textDiv.classList.remove('hidden');
+    // Quitar "required" de las opciones ocultas para que deje guardar
+    ['oA', 'oB', 'oC', 'oD', 'correct'].forEach(id => {
+      document.getElementById(`q${index}-${id}`).removeAttribute('required');
+    });
+  } else {
+    multipleDiv.classList.remove('hidden');
+    textDiv.classList.add('hidden');
+    // Volver a requerir
+    ['oA', 'oB', 'oC', 'oD', 'correct'].forEach(id => {
+      document.getElementById(`q${index}-${id}`).setAttribute('required', 'true');
+    });
   }
 }
 
@@ -91,14 +128,28 @@ async function submitExamCreation() {
 
   let preguntas = [];
   for (let i = 1; i <= 5; i++) {
-    preguntas.push({
-      id: i, texto: document.getElementById(`q${i}-text`).value,
-      opciones: {
-        A: document.getElementById(`q${i}-oA`).value, B: document.getElementById(`q${i}-oB`).value,
-        C: document.getElementById(`q${i}-oC`).value, D: document.getElementById(`q${i}-oD`).value
-      },
-      correcta: document.getElementById(`q${i}-correct`).value
-    });
+    const tipo = document.getElementById(`q${i}-type`).value;
+    
+    if (tipo === 'multiple') {
+      preguntas.push({
+        id: i, 
+        tipo: 'multiple',
+        texto: document.getElementById(`q${i}-text`).value,
+        opciones: {
+          A: document.getElementById(`q${i}-oA`).value, B: document.getElementById(`q${i}-oB`).value,
+          C: document.getElementById(`q${i}-oC`).value, D: document.getElementById(`q${i}-oD`).value
+        },
+        correcta: document.getElementById(`q${i}-correct`).value
+      });
+    } else {
+      preguntas.push({
+        id: i, 
+        tipo: 'text',
+        texto: document.getElementById(`q${i}-text`).value,
+        opciones: null,
+        correcta: 'MANUAL'
+      });
+    }
   }
 
   showLoader(true);
@@ -169,42 +220,47 @@ function generarPDFDocente(codigoSala, resultados, examen) {
       y += (splitQuestion.length * 6);
       
       doc.setFont("helvetica", "normal");
+      const respAlumno = res.respuestas ? res.respuestas[q.id] : "Sin responder";
       
-      const respAlumnoClave = res.respuestas ? res.respuestas[q.id] : null;
-      const esCorrecto = (respAlumnoClave === q.correcta);
-      
-      // Protección contra datos antiguos
-      const opcionesDisponibles = q.opciones || {}; 
-      const textoAlternativaAlumno = opcionesDisponibles[respAlumnoClave] ? opcionesDisponibles[respAlumnoClave] : "";
-      const textoAlternativaCorrecta = opcionesDisponibles[q.correcta] ? opcionesDisponibles[q.correcta] : "";
-
-      // Obtener el texto completo de las alternativas
-      const textoRespAlumno = (respAlumnoClave && respAlumnoClave !== "Sin responder") 
-                              ? `${respAlumnoClave}) ${textoAlternativaAlumno}` 
-                              : 'Sin marcar';
-      const textoRespCorrecta = `${q.correcta}) ${textoAlternativaCorrecta}`;
-      
-      if (esCorrecto) {
-        doc.setTextColor(39, 174, 96); // Verde para correcto
-        const splitResp = doc.splitTextToSize(`Respuesta del alumno: ${textoRespAlumno}   ( ✓ Correcto )`, 165);
-        doc.text(splitResp, 25, y);
-        y += (splitResp.length * 6) + 4;
+      if (q.tipo === 'multiple' || !q.tipo) {
+          const esCorrecto = (respAlumno === q.correcta);
+          const opcionesDisponibles = q.opciones || {}; 
+          const textoAlternativaAlumno = opcionesDisponibles[respAlumno] ? opcionesDisponibles[respAlumno] : "";
+          const textoRespAlumno = (respAlumno && respAlumno !== "Sin responder" && respAlumno !== "ANULADA (Infracción)") ? `${respAlumno}) ${textoAlternativaAlumno}` : respAlumno;
+          
+          if (respAlumno === "ANULADA (Infracción)") {
+              doc.setTextColor(192, 57, 43);
+              doc.text(`Respuesta: ANULADA (Infracción Anti-Trampa)`, 25, y);
+              y += 10;
+          } else if (esCorrecto) {
+            doc.setTextColor(39, 174, 96);
+            const splitResp = doc.splitTextToSize(`Respuesta: ${textoRespAlumno}   ( ✓ Correcto )`, 165);
+            doc.text(splitResp, 25, y);
+            y += (splitResp.length * 6) + 2;
+          } else {
+            doc.setTextColor(192, 57, 43);
+            const splitResp = doc.splitTextToSize(`Respuesta: ${textoRespAlumno}   ( X Incorrecto )`, 165);
+            doc.text(splitResp, 25, y);
+            y += (splitResp.length * 6);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`Clave correcta: ${q.correcta}) ${opcionesDisponibles[q.correcta] || ''}`, 25, y);
+            y += 8;
+          }
       } else {
-        doc.setTextColor(192, 57, 43); // Rojo para incorrecto
-        const splitResp = doc.splitTextToSize(`Respuesta del alumno: ${textoRespAlumno}   ( X Incorrecto )`, 165);
-        doc.text(splitResp, 25, y);
-        y += (splitResp.length * 6) + 2;
-        
-        doc.setTextColor(0, 0, 0); // Negro para mostrar corrección
-        const splitCorr = doc.splitTextToSize(`La respuesta correcta era: ${textoRespCorrecta}`, 165);
-        doc.text(splitCorr, 25, y);
-        y += (splitCorr.length * 6) + 4;
+          // Pregunta Abierta
+          doc.setTextColor(41, 128, 185); // Azul para diferenciar respuestas manuales
+          doc.text(`Respuesta libre del alumno:`, 25, y);
+          y += 6;
+          doc.setTextColor(0, 0, 0);
+          const splitLibre = doc.splitTextToSize(`"${respAlumno}"`, 160);
+          doc.text(splitLibre, 25, y);
+          y += (splitLibre.length * 6) + 4;
+          doc.setTextColor(142, 68, 173); // Morado para nota manual
+          doc.text(`[   ] Evaluación Manual Docente`, 25, y);
+          y += 8;
       }
       
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
-      }
+      if (y > 270) { doc.addPage(); y = 20; }
     });
   });
 
@@ -263,31 +319,38 @@ function renderCurrentQuestion() {
   const container = document.getElementById('student-questions-container');
   container.innerHTML = '';
   
-  // Limpiar temporizador de la pregunta anterior y arrancar el nuevo
   clearInterval(timerInterval);
   timeRemaining = timePerQuestion;
   updateTimerDisplay();
 
   const q = currentExamData[currentQuestionIndex];
   
-  // Actualizar Barra de Progreso
   const progressPercent = ((currentQuestionIndex + 1) / totalQuestions) * 100;
   document.getElementById('exam-progress').style.width = `${progressPercent}%`;
 
-  const opciones = q.opciones || {};
+  let interactableHTML = '';
+  
+  if (q.tipo === 'multiple' || !q.tipo) {
+    const opciones = q.opciones || {};
+    interactableHTML = `
+      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="A" style="display:none;"> A) ${opciones.A || ''}</label>
+      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="B" style="display:none;"> B) ${opciones.B || ''}</label>
+      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="C" style="display:none;"> C) ${opciones.C || ''}</label>
+      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="D" style="display:none;"> D) ${opciones.D || ''}</label>
+    `;
+  } else {
+    interactableHTML = `
+      <textarea id="resp_text_${q.id}" rows="6" class="w-full border-2 border-indigo-300 rounded-lg p-3 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Escribe tu respuesta aquí..."></textarea>
+    `;
+  }
 
   container.innerHTML = `
     <div class="question-container active">
       <h4 style="color: var(--accent); margin-bottom: 15px;">Pregunta ${currentQuestionIndex + 1} de ${totalQuestions}</h4>
       <p style="font-size: 18px; margin-bottom: 20px;"><strong>${q.texto}</strong></p>
-      
-      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="A" style="display:none;"> A) ${opciones.A || ''}</label>
-      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="B" style="display:none;"> B) ${opciones.B || ''}</label>
-      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="C" style="display:none;"> C) ${opciones.C || ''}</label>
-      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="D" style="display:none;"> D) ${opciones.D || ''}</label>
+      ${interactableHTML}
     </div>`;
 
-  // Mostrar el botón "Siguiente" o "Finalizar" según corresponda
   if (currentQuestionIndex < totalQuestions - 1) {
     document.getElementById('btn-next-question').style.display = 'block';
     document.getElementById('btn-finish-exam').style.display = 'none';
@@ -296,19 +359,13 @@ function renderCurrentQuestion() {
     document.getElementById('btn-finish-exam').style.display = 'block';
   }
 
-  // Cuenta regresiva individual
   timerInterval = setInterval(() => {
     timeRemaining--;
     updateTimerDisplay();
-    
-    // Si se acaba el tiempo de esta pregunta
     if (timeRemaining <= 0) {
       clearInterval(timerInterval);
-      if (currentQuestionIndex < totalQuestions - 1) {
-        nextQuestion(); // Obliga a pasar a la siguiente pregunta
-      } else {
-        finishExam(); // Obliga a enviar el examen si es la última
-      }
+      if (currentQuestionIndex < totalQuestions - 1) nextQuestion(); 
+      else finishExam(); 
     }
   }, 1000);
 }
@@ -334,10 +391,14 @@ function selectOption(labelElement) {
 }
 
 function nextQuestion() {
-  // Guardar la respuesta marcada antes de avanzar
   const q = currentExamData[currentQuestionIndex];
-  const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
-  temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
+  if (q.tipo === 'multiple' || !q.tipo) {
+    const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
+    temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
+  } else {
+    const textoArea = document.getElementById(`resp_text_${q.id}`);
+    temporalRespuestas[q.id] = textoArea ? textoArea.value.trim() : "Sin responder";
+  }
 
   currentQuestionIndex++;
   renderCurrentQuestion();
@@ -349,15 +410,23 @@ async function finishExam() {
   
   // Guardar la respuesta de la última pregunta en pantalla
   const q = currentExamData[currentQuestionIndex];
-  const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
-  temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
+  if (q.tipo === 'multiple' || !q.tipo) {
+    const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
+    temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
+  } else {
+    const textoArea = document.getElementById(`resp_text_${q.id}`);
+    temporalRespuestas[q.id] = textoArea ? textoArea.value.trim() : "Sin responder";
+  }
 
   let puntaje = 0;
 
   // Evaluar las respuestas acumuladas vs la clave
   currentExamData.forEach(pregunta => {
-    const valor = temporalRespuestas[pregunta.id];
-    if (valor === pregunta.correcta) puntaje += 4; 
+    if (pregunta.tipo === 'multiple' || !pregunta.tipo) {
+      const valor = temporalRespuestas[pregunta.id];
+      if (valor === pregunta.correcta) puntaje += 4; 
+    }
+    // Las preguntas abiertas no se califican automáticamente
   });
 
   // Aplicar las penalizaciones acumuladas por trampa
@@ -443,18 +512,29 @@ function generarPDFExamenBlanco(codigoSala, examen) {
     doc.text(splitQuestion, 20, y);
     y += (splitQuestion.length * 6) + 2;
     
-    // Alternativas completas
+    // Alternativas completas (solo para opción múltiple)
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
-    const opcionesClaves = ['A', 'B', 'C', 'D'];
-    const opcionesDisponibles = q.opciones || {}; 
     
-    opcionesClaves.forEach(opt => {
-      const textoOpcion = `${opt}) ${opcionesDisponibles[opt] ? opcionesDisponibles[opt] : '_________'}`;
-      const splitOpcion = doc.splitTextToSize(textoOpcion, 160);
-      doc.text(splitOpcion, 25, y);
-      y += (splitOpcion.length * 6) + 2;
-    });
+    if (q.tipo === 'multiple' || !q.tipo) {
+      const opcionesClaves = ['A', 'B', 'C', 'D'];
+      const opcionesDisponibles = q.opciones || {}; 
+      
+      opcionesClaves.forEach(opt => {
+        const textoOpcion = `${opt}) ${opcionesDisponibles[opt] ? opcionesDisponibles[opt] : '_________'}`;
+        const splitOpcion = doc.splitTextToSize(textoOpcion, 160);
+        doc.text(splitOpcion, 25, y);
+        y += (splitOpcion.length * 6) + 2;
+      });
+    } else {
+      // Pregunta abierta: líneas para escribir
+      doc.text("Respuesta:", 25, y);
+      y += 8;
+      for (let l = 0; l < 4; l++) {
+        doc.line(25, y, 185, y);
+        y += 8;
+      }
+    }
     
     y += 8; // Espacio extra entre preguntas
     
@@ -468,7 +548,7 @@ function generarPDFExamenBlanco(codigoSala, examen) {
   doc.save(`Examen_Blanco_Sala_${codigoSala}.pdf`);
 }
 
-// ===== MOTOR ANTI-TRAMPAS (ACTUALIZADO CON PENALIZACIÓN Y SALTO) =====
+// ===== MOTOR ANTI-TRAMPAS (ADVERTENCIA LIMPIA EN LA 1RA, CASTIGO DESDE LA 2DA) =====
 // 1. Detectar si minimiza o cambia de pestaña
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && isExamActive) {
@@ -491,19 +571,24 @@ document.addEventListener('paste', event => { if(isExamActive) event.preventDefa
 function handleCheatWarning(motivo) {
   cheatWarnings++;
   
-  // Guardar la pregunta en la que hizo trampa con un valor de infracción
+  // PRIMERA INFRACCIÓN: Solo advertencia, no hay penalidad ni salto
+  if (cheatWarnings === 1) {
+    alert(`¡ADVERTENCIA ANTI-TRAMPA (1/2)!\nMotivo: ${motivo}\n\nEstá prohibido salir de la ventana de la evaluación. A tu próxima infracción, la pregunta en la que estés será ANULADA y se restarán 2 puntos de tu calificación global.`);
+    return; // Detiene la función aquí para no castigar aún
+  }
+
+  // SEGUNDA Y TERCERA INFRACCIÓN: Se aplica la penalidad
+  // 1. Guardar la pregunta actual como anulada
   const qActual = currentExamData[currentQuestionIndex];
   temporalRespuestas[qActual.id] = "ANULADA (Infracción)";
 
-  // Sumar 2 puntos negativos al contador de ruido/infracción general (para restarlo al final)
+  // 2. Sumar 2 puntos negativos al contador global
   if (!gameState.penalidadTrampa) gameState.penalidadTrampa = 0;
   gameState.penalidadTrampa -= 2;
 
-  if (cheatWarnings >= 3) {
-    alert(`¡INFRACCIÓN CRÍTICA!\nMotivo: ${motivo}\n\nHas superado el límite de 2 advertencias permitidas. Tu evaluación ha sido cancelada.\nSe han descontado 2 puntos adicionales por esta infracción.`);
-    finishExam(); // Fuerza el envío inmediato
-  } else {
-    alert(`¡ADVERTENCIA ANTI-TRAMPA (${cheatWarnings}/2)!\nMotivo: ${motivo}\n\nEstá prohibido salir de la ventana de la evaluación. La pregunta actual ha sido anulada y se han restado 2 puntos de tu calificación global.`);
+  // 3. Evaluar si es la segunda (salto) o tercera (cierre total)
+  if (cheatWarnings === 2) {
+    alert(`¡ADVERTENCIA ANTI-TRAMPA (2/2)!\nMotivo: ${motivo}\n\nLa pregunta actual ha sido ANULADA y se han RESTADO 2 puntos de tu calificación global. A tu próxima infracción tu examen será cancelado por completo.`);
     
     // Forzar el salto a la siguiente pregunta si no es la última
     if (currentQuestionIndex < totalQuestions - 1) {
@@ -511,9 +596,12 @@ function handleCheatWarning(motivo) {
       currentQuestionIndex++;
       renderCurrentQuestion();
     } else {
-      // Si hizo trampa en la última pregunta y aún le quedaban strikes, igual finaliza
-      finishExam();
+      finishExam(); // Si hizo trampa en la última pregunta, se envía
     }
+  } 
+  else if (cheatWarnings >= 3) {
+    alert(`¡INFRACCIÓN CRÍTICA!\nMotivo: ${motivo}\n\nHas superado el límite de advertencias permitidas. Tu evaluación ha sido cancelada.\nSe han descontado 2 puntos adicionales por esta infracción.`);
+    finishExam(); // Fuerza el envío inmediato y cierre de la evaluación
   }
 }
 
