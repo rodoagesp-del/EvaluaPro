@@ -1,611 +1,353 @@
-// NUEVO LINK ASIGNADO
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwZc3mIbD6Q83gohbWp-uTE3jjZVGLSAPqBErfFNn-sMWLi4EwsFg43Kki5WfXfJpFuEw/exec';
+// Enlaces a los Google Sheets (CSV)
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQpvGU5GwEfk6hK5A9eiO5-moXq9gxlxywtrXEfc63vaxGw6xDGAsCVkiUEJUH3uiBz1MrxVFqgKKaL/pub?gid=1727735409&single=true&output=csv';
+const USOS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTGndkXKibFfCovjtznlsbD4V9AiU593xd_3KSwoLOjppTMBFiEHWaG2zEMDWVPkSnUno7wdHU8Cca-/pub?gid=1408750423&single=true&output=csv';
 
-let currentStudentName = '', currentRoomCode = '', currentExamData = [];
-let timeRemaining = 0, timerInterval;
-let myLastPuntaje = 0, myLastRespuestas = {};
+// 👇 PEGA AQUÍ EL ENLACE DEL ARCHIVO "zonas_agricolas.xlsx" PUBLICADO COMO CSV
+const ZONAS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBeeBtO4H6JIiEGwzlQLDVPIB2tWO-N83j6xt34j4RCqhz_1FF0jiWkXLbcKQy7naM6u_GRoLveSp7/pubhtml?gid=1473578018&single=true';
 
-// ===== ESTADO DEL JUEGO (PARA PENALIZACIONES) =====
-let gameState = {
-  penalidadTrampa: 0
+let inventarioGlobal = [];
+let aplicacionesGlobal = [];
+let usosGlobal = [];
+let zonasGlobal = {};
+
+const ALMACENES_MAP = {
+    "ALMACÉN DE SAN BORJA": "Almacén de San Borja",
+    "ALMACEN DE SAN BORJA": "Almacén de San Borja",
+    "ALMACÉN DE QUILMANA": "Almacén de Quilmana",
+    "ALMACEN DE QUILMANA": "Almacén de Quilmana",
+    "ALMACÉN DE QUILMANÁ": "Almacén de Quilmana",
+    "ALMACEN DE QUILMANÁ": "Almacén de Quilmana",
+    "ALMACÉN FUNDO": "Almacén Fundo",
+    "ALMACEN FUNDO": "Almacén Fundo",
+    "PROHASS": "Almacén de San Borja"
 };
 
-// ===== SISTEMA DE TEMÁTICAS ESTACIONALES =====
-function applySeasonalTheme() {
-  const month = new Date().getMonth() + 1; // Enero es 1, Octubre 10, Diciembre 12
-  const body = document.body;
-  const title = document.getElementById('app-title');
-  
-  body.className = ''; // Limpiar temas
-  if (month === 10) {
-    body.classList.add('theme-halloween');
-    title.innerText = "🎃 EvaluaPro Halloween 🦇";
-  } else if (month === 12) {
-    body.classList.add('theme-christmas');
-    title.innerText = "🎄 EvaluaPro Navideño ❄️";
-  } else if (month >= 9 && month <= 11) { // Septiembre (Primavera sur)
-    body.classList.add('theme-spring');
-    title.innerText = "🌻 EvaluaPro Primavera 🦋";
-  } else {
-    body.classList.add('theme-default');
-    title.innerText = "Plataforma de Evaluación";
-  }
-}
-window.onload = applySeasonalTheme;
+document.addEventListener("DOMContentLoaded", initApp);
 
-// ===== UTILIDADES =====
-function showView(viewId) {
-  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
-  document.getElementById(viewId).classList.remove('hidden');
-}
-function showLoader(show) { document.getElementById('loader').style.display = show ? 'flex' : 'none'; }
-
-async function postData(payload) {
-  try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload)
-    });
-    return await res.json();
-  } catch (error) {
-    alert("Error de conexión con el servidor.");
-    showLoader(false);
-  }
-}
-
-// ===== DOCENTE =====
-function loginTeacher() {
-  const pass = document.getElementById('teacher-pass').value;
-  if (pass === 'T47P16I') {
-    document.getElementById('teacher-pass').value = '';
-    renderQuestionsForm();
-    showView('view-teacher-dashboard');
-  } else alert('Contraseña incorrecta');
-}
-
-function renderQuestionsForm() {
-  const container = document.getElementById('questions-container');
-  container.innerHTML = '';
-  for (let i = 1; i <= 5; i++) {
-    container.innerHTML += `
-      <div class="q-block">
-        <h4>Pregunta ${i}</h4>
-        <select id="q${i}-type" onchange="toggleQuestionType(${i})" class="mb-2 font-bold text-indigo-700 bg-indigo-50">
-          <option value="multiple">Opción Múltiple</option>
-          <option value="text">Respuesta Abierta (Texto)</option>
-        </select>
-        
-        <input type="text" id="q${i}-text" placeholder="Texto de la Pregunta" required>
-        
-        <!-- Opciones para Opción Múltiple -->
-        <div id="q${i}-multiple-options">
-          <input type="text" id="q${i}-oA" placeholder="A)" required>
-          <input type="text" id="q${i}-oB" placeholder="B)" required>
-          <input type="text" id="q${i}-oC" placeholder="C)" required>
-          <input type="text" id="q${i}-oD" placeholder="D)" required>
-          <select id="q${i}-correct" required>
-            <option value="A">Clave: A</option><option value="B">Clave: B</option>
-            <option value="C">Clave: C</option><option value="D">Clave: D</option>
-          </select>
-        </div>
-        
-        <!-- Mensaje para Respuesta Abierta -->
-        <div id="q${i}-text-options" class="hidden">
-          <p class="text-sm text-gray-600 italic mb-2">El alumno responderá con un cuadro de texto. Esta pregunta debe ser revisada manualmente por el docente en el PDF.</p>
-        </div>
-      </div>`;
-  }
-}
-
-// Nueva función para alternar la vista del creador de preguntas
-function toggleQuestionType(index) {
-  const type = document.getElementById(`q${index}-type`).value;
-  const multipleDiv = document.getElementById(`q${index}-multiple-options`);
-  const textDiv = document.getElementById(`q${index}-text-options`);
-  
-  if (type === 'text') {
-    multipleDiv.classList.add('hidden');
-    textDiv.classList.remove('hidden');
-    // Quitar "required" de las opciones ocultas para que deje guardar
-    ['oA', 'oB', 'oC', 'oD', 'correct'].forEach(id => {
-      document.getElementById(`q${index}-${id}`).removeAttribute('required');
-    });
-  } else {
-    multipleDiv.classList.remove('hidden');
-    textDiv.classList.add('hidden');
-    // Volver a requerir
-    ['oA', 'oB', 'oC', 'oD', 'correct'].forEach(id => {
-      document.getElementById(`q${index}-${id}`).setAttribute('required', 'true');
-    });
-  }
-}
-
-async function submitExamCreation() {
-  const code = document.getElementById('exam-code').value.trim();
-  const mins = document.getElementById('exam-time').value;
-  if (!code || !mins) return alert("Faltan datos.");
-
-  let preguntas = [];
-  for (let i = 1; i <= 5; i++) {
-    const tipo = document.getElementById(`q${i}-type`).value;
-    
-    if (tipo === 'multiple') {
-      preguntas.push({
-        id: i, 
-        tipo: 'multiple',
-        texto: document.getElementById(`q${i}-text`).value,
-        opciones: {
-          A: document.getElementById(`q${i}-oA`).value, B: document.getElementById(`q${i}-oB`).value,
-          C: document.getElementById(`q${i}-oC`).value, D: document.getElementById(`q${i}-oD`).value
+function initApp() {
+    Papa.parse(CSV_URL, {
+        download: true, header: true, skipEmptyLines: true, transformHeader: h => h.trim(),
+        complete: function(results) {
+            procesarDatos(results.data);
+            cargarUsos();
+            cargarZonas();
         },
-        correcta: document.getElementById(`q${i}-correct`).value
-      });
-    } else {
-      preguntas.push({
-        id: i, 
-        tipo: 'text',
-        texto: document.getElementById(`q${i}-text`).value,
-        opciones: null,
-        correcta: 'MANUAL'
-      });
-    }
-  }
-
-  showLoader(true);
-  const res = await postData({ action: 'crear_examen', codigoSala: code, minutos: mins, preguntas: preguntas });
-  showLoader(false);
-  if (res && res.status === 'success') { alert(`Sala ${code} lista.`); }
-}
-
-async function downloadTeacherReport() {
-  const code = document.getElementById('report-code').value.trim();
-  if(!code) return alert("Ingresa un código de sala.");
-
-  showLoader(true);
-  const res = await postData({ action: 'obtener_resultados', codigoSala: code });
-  showLoader(false);
-
-  if (res && res.status === 'success' && res.resultados.length > 0) {
-    generarPDFDocente(code, res.resultados, res.examen);
-  } else {
-    alert("No hay resultados o la sala no existe.");
-  }
-}
-
-// ===== GENERACIÓN DE PDF CALIFICADO (ROBUSTO) =====
-function generarPDFDocente(codigoSala, resultados, examen) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  if (!resultados || resultados.length === 0) {
-      alert("No hay resultados de alumnos para esta sala.");
-      return;
-  }
-
-  resultados.forEach((res, index) => {
-    if (index > 0) doc.addPage(); 
-
-    // Cabecera del examen tipo físico
-    doc.setFontSize(22);
-    doc.setTextColor(41, 128, 185);
-    doc.setFont("helvetica", "bold");
-    doc.text("Evaluación Escrita Calificada", 105, 20, null, null, "center");
-    
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Alumno: ${res.alumno || 'Desconocido'}`, 20, 35);
-    doc.text(`Código de Sala: ${codigoSala}`, 20, 42);
-    
-    // Nota gigante en la esquina superior derecha
-    doc.setFontSize(16);
-    doc.setTextColor(192, 57, 43); 
-    doc.setFont("helvetica", "bold");
-    doc.text(`NOTA FINAL: ${res.puntaje || 0} / 20`, 130, 38);
-    
-    doc.setDrawColor(200);
-    doc.line(20, 48, 190, 48);
-
-    let y = 60; 
-    
-    examen.forEach((q, qIndex) => {
-      doc.setFontSize(11);
-      doc.setTextColor(0, 0, 0);
-      doc.setFont("helvetica", "bold");
-      
-      const preguntaTexto = q.texto ? q.texto : "Pregunta no encontrada";
-      const splitQuestion = doc.splitTextToSize(`${qIndex + 1}. ${preguntaTexto}`, 170);
-      doc.text(splitQuestion, 20, y);
-      y += (splitQuestion.length * 6);
-      
-      doc.setFont("helvetica", "normal");
-      const respAlumno = res.respuestas ? res.respuestas[q.id] : "Sin responder";
-      
-      if (q.tipo === 'multiple' || !q.tipo) {
-          const esCorrecto = (respAlumno === q.correcta);
-          const opcionesDisponibles = q.opciones || {}; 
-          const textoAlternativaAlumno = opcionesDisponibles[respAlumno] ? opcionesDisponibles[respAlumno] : "";
-          const textoRespAlumno = (respAlumno && respAlumno !== "Sin responder" && respAlumno !== "ANULADA (Infracción)") ? `${respAlumno}) ${textoAlternativaAlumno}` : respAlumno;
-          
-          if (respAlumno === "ANULADA (Infracción)") {
-              doc.setTextColor(192, 57, 43);
-              doc.text(`Respuesta: ANULADA (Infracción Anti-Trampa)`, 25, y);
-              y += 10;
-          } else if (esCorrecto) {
-            doc.setTextColor(39, 174, 96);
-            const splitResp = doc.splitTextToSize(`Respuesta: ${textoRespAlumno}   ( ✓ Correcto )`, 165);
-            doc.text(splitResp, 25, y);
-            y += (splitResp.length * 6) + 2;
-          } else {
-            doc.setTextColor(192, 57, 43);
-            const splitResp = doc.splitTextToSize(`Respuesta: ${textoRespAlumno}   ( X Incorrecto )`, 165);
-            doc.text(splitResp, 25, y);
-            y += (splitResp.length * 6);
-            doc.setTextColor(0, 0, 0);
-            doc.text(`Clave correcta: ${q.correcta}) ${opcionesDisponibles[q.correcta] || ''}`, 25, y);
-            y += 8;
-          }
-      } else {
-          // Pregunta Abierta
-          doc.setTextColor(41, 128, 185); // Azul para diferenciar respuestas manuales
-          doc.text(`Respuesta libre del alumno:`, 25, y);
-          y += 6;
-          doc.setTextColor(0, 0, 0);
-          const splitLibre = doc.splitTextToSize(`"${respAlumno}"`, 160);
-          doc.text(splitLibre, 25, y);
-          y += (splitLibre.length * 6) + 4;
-          doc.setTextColor(142, 68, 173); // Morado para nota manual
-          doc.text(`[   ] Evaluación Manual Docente`, 25, y);
-          y += 8;
-      }
-      
-      if (y > 270) { doc.addPage(); y = 20; }
+        error: function(error) {
+            document.getElementById('loading').innerText = "Error de conexión. Intente en modo online.";
+        }
     });
-  });
-
-  doc.save(`Examenes_Calificados_Sala_${codigoSala}.pdf`);
 }
 
-// Variables para control de paginación y tiempo individual
-let currentQuestionIndex = 0;
-let timePerQuestion = 0;
-let totalQuestions = 0;
-let resTempMinutos = 0;
-let temporalRespuestas = {};
-
-// ===== NUEVAS VARIABLES ANTI-TRAMPA =====
-let cheatWarnings = 0;
-let isExamActive = false;
-
-// ===== ALUMNO =====
-async function loginStudent() {
-  const name = document.getElementById('student-name').value.trim();
-  const code = document.getElementById('student-code').value.trim();
-  if (!name || !code) return alert("Completa tus datos.");
-
-  showLoader(true);
-  const res = await postData({ action: 'ingresar_sala', codigoSala: code });
-  showLoader(false);
-
-  if (res && res.status === 'success') {
-    currentStudentName = name; currentRoomCode = code; currentExamData = res.examen;
-    resTempMinutos = res.minutos; // Guardamos los minutos totales
-    startExam();
-  } else alert("Sala inactiva.");
+function cargarUsos() {
+    if (!USOS_CSV_URL) return;
+    Papa.parse(USOS_CSV_URL, {
+        download: true, header: true, skipEmptyLines: true, transformHeader: h => h.trim(),
+        complete: function(results) { usosGlobal = results.data; }
+    });
 }
 
-function startExam() {
-  document.getElementById('display-student').innerText = currentStudentName;
-  
-  // Dividir el tiempo total en partes iguales (minutos a segundos)
-  totalQuestions = currentExamData.length;
-  const totalSeconds = parseInt(resTempMinutos) * 60; 
-  timePerQuestion = Math.floor(totalSeconds / totalQuestions);
-  
-  currentQuestionIndex = 0;
-  temporalRespuestas = {}; // Reiniciar respuestas
-  
-  // INICIAR VIGILANCIA ANTI-TRAMPA
-  cheatWarnings = 0;
-  isExamActive = true;
-  gameState.penalidadTrampa = 0; // Reiniciar penalizaciones
-  
-  showView('view-exam');
-  renderCurrentQuestion();
-}
-
-function renderCurrentQuestion() {
-  const container = document.getElementById('student-questions-container');
-  container.innerHTML = '';
-  
-  clearInterval(timerInterval);
-  timeRemaining = timePerQuestion;
-  updateTimerDisplay();
-
-  const q = currentExamData[currentQuestionIndex];
-  
-  const progressPercent = ((currentQuestionIndex + 1) / totalQuestions) * 100;
-  document.getElementById('exam-progress').style.width = `${progressPercent}%`;
-
-  let interactableHTML = '';
-  
-  if (q.tipo === 'multiple' || !q.tipo) {
-    const opciones = q.opciones || {};
-    interactableHTML = `
-      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="A" style="display:none;"> A) ${opciones.A || ''}</label>
-      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="B" style="display:none;"> B) ${opciones.B || ''}</label>
-      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="C" style="display:none;"> C) ${opciones.C || ''}</label>
-      <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="D" style="display:none;"> D) ${opciones.D || ''}</label>
-    `;
-  } else {
-    interactableHTML = `
-      <textarea id="resp_text_${q.id}" rows="6" class="w-full border-2 border-indigo-300 rounded-lg p-3 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Escribe tu respuesta aquí..."></textarea>
-    `;
-  }
-
-  container.innerHTML = `
-    <div class="question-container active">
-      <h4 style="color: var(--accent); margin-bottom: 15px;">Pregunta ${currentQuestionIndex + 1} de ${totalQuestions}</h4>
-      <p style="font-size: 18px; margin-bottom: 20px;"><strong>${q.texto}</strong></p>
-      ${interactableHTML}
-    </div>`;
-
-  if (currentQuestionIndex < totalQuestions - 1) {
-    document.getElementById('btn-next-question').style.display = 'block';
-    document.getElementById('btn-finish-exam').style.display = 'none';
-  } else {
-    document.getElementById('btn-next-question').style.display = 'none';
-    document.getElementById('btn-finish-exam').style.display = 'block';
-  }
-
-  timerInterval = setInterval(() => {
-    timeRemaining--;
-    updateTimerDisplay();
-    if (timeRemaining <= 0) {
-      clearInterval(timerInterval);
-      if (currentQuestionIndex < totalQuestions - 1) nextQuestion(); 
-      else finishExam(); 
+function cargarZonas() {
+    if (!ZONAS_CSV_URL || ZONAS_CSV_URL === 'AQUI_PONER_EL_NUEVO_ENLACE_CSV_DE_ZONAS') {
+        document.getElementById('loading').style.display = 'none';
+        return;
     }
-  }, 1000);
+    Papa.parse(ZONAS_CSV_URL, {
+        download: true, header: true, skipEmptyLines: true, transformHeader: h => h.trim(),
+        complete: function(results) {
+            results.data.forEach(r => {
+                let nombreSector = (r["Nombre_Sector"] || r["Nombre del Sector"] || "").trim().toUpperCase();
+                let arboles = parseFloat(r["Num_Arboles"] || r["Número de Árboles"]) || 0;
+                if (nombreSector) zonasGlobal[nombreSector] = arboles;
+            });
+            document.getElementById('loading').style.display = 'none';
+        }
+    });
 }
 
-function updateTimerDisplay() {
-  let m = Math.floor(timeRemaining / 60);
-  let s = timeRemaining % 60;
-  document.getElementById('timer').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+function normalizarAlmacen(alm) {
+    if (!alm) return "";
+    let upper = alm.trim().toUpperCase();
+    return ALMACENES_MAP[upper] || upper;
 }
 
-// Resaltar visualmente la opción seleccionada por el alumno
-function selectOption(labelElement) {
-  const container = document.getElementById('student-questions-container');
-  const labels = container.querySelectorAll('.option-label');
-  labels.forEach(l => {
-    l.classList.remove('selected');
-    l.style.backgroundColor = '#fff';
-    l.style.borderColor = '#ccc';
-  });
-  
-  labelElement.classList.add('selected');
-  labelElement.querySelector('input').checked = true;
-}
-
-function nextQuestion() {
-  const q = currentExamData[currentQuestionIndex];
-  if (q.tipo === 'multiple' || !q.tipo) {
-    const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
-    temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
-  } else {
-    const textoArea = document.getElementById(`resp_text_${q.id}`);
-    temporalRespuestas[q.id] = textoArea ? textoArea.value.trim() : "Sin responder";
-  }
-
-  currentQuestionIndex++;
-  renderCurrentQuestion();
-}
-
-async function finishExam() {
-  clearInterval(timerInterval);
-  isExamActive = false; // DETENER VIGILANCIA ANTI-TRAMPA
-  
-  // Guardar la respuesta de la última pregunta en pantalla
-  const q = currentExamData[currentQuestionIndex];
-  if (q.tipo === 'multiple' || !q.tipo) {
-    const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
-    temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
-  } else {
-    const textoArea = document.getElementById(`resp_text_${q.id}`);
-    temporalRespuestas[q.id] = textoArea ? textoArea.value.trim() : "Sin responder";
-  }
-
-  let puntaje = 0;
-
-  // Evaluar las respuestas acumuladas vs la clave
-  currentExamData.forEach(pregunta => {
-    if (pregunta.tipo === 'multiple' || !pregunta.tipo) {
-      const valor = temporalRespuestas[pregunta.id];
-      if (valor === pregunta.correcta) puntaje += 4; 
+function formatearFechaVencimiento(fechaStr) {
+    if (!fechaStr || fechaStr === "-" || fechaStr === "DD/MM/AAAA") return "-";
+    if (fechaStr.includes("T")) {
+        let d = new Date(fechaStr);
+        let mes = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+        let anio = d.getUTCFullYear();
+        return `${mes}/${anio}`;
     }
-    // Las preguntas abiertas no se califican automáticamente
-  });
-
-  // Aplicar las penalizaciones acumuladas por trampa
-  if (gameState.penalidadTrampa) {
-      puntaje += gameState.penalidadTrampa;
-  }
-
-  // Asegurar que el puntaje no sea negativo
-  if (puntaje < 0) puntaje = 0;
-
-  showLoader(true);
-  const res = await postData({
-    action: 'enviar_examen', codigoSala: currentRoomCode,
-    nombreAlumno: currentStudentName, respuestas: temporalRespuestas, puntaje: puntaje
-  });
-  showLoader(false);
-
-  if (res && res.status === 'success') {
-    // Guardar variables globales para el PDF o referencias
-    myLastPuntaje = puntaje;
-    myLastRespuestas = temporalRespuestas;
-    
-    // Mostrar nota gigante
-    document.getElementById('final-score-number').innerText = puntaje;
-    showView('view-result');
-  } else {
-    alert("Error al enviar su evaluación. Intente nuevamente.");
-  }
+    let parts = fechaStr.split("/");
+    if (parts.length === 3) {
+        let mes = parts[1].padStart(2, '0');
+        return `${mes}/${parts[2]}`;
+    }
+    return fechaStr;
 }
 
-// ===== DESCARGA DE EXAMEN EN BLANCO =====
-async function downloadBlankExam() {
-  const code = document.getElementById('report-code').value.trim();
-  if(!code) return alert("Ingresa un código de sala para descargar el examen en blanco.");
+function procesarDatos(data) {
+    let stockMap = {};
+    aplicacionesGlobal = [];
 
-  showLoader(true);
-  // Reutilizamos el endpoint de obtener_resultados porque nos devuelve el 'examen' íntegro
-  const res = await postData({ action: 'obtener_resultados', codigoSala: code });
-  showLoader(false);
+    data.forEach(row => {
+        let op = (row["Operación"] || "").trim().toUpperCase();
+        let prod = (row["Producto"] || "").trim().toUpperCase();
+        let pa = (row["Principio Activo"] || "").trim().toUpperCase();
+        let cat = (row["Categoría"] || "").trim().toUpperCase();
+        let obj = (row["Objetivo Fitosanitario"] || "").trim().toUpperCase();
+        let lote = (row["Lote"] || "").trim().toUpperCase();
+        let venc = formatearFechaVencimiento((row["Fecha Vencimiento"] || "").trim());
+        let um = (row["Unidad Medida"] || "").trim();
+        let origenRaw = (row["Origen"] || "").trim();
+        let destinoRaw = (row["Destino"] || "").trim();
+        let origen = normalizarAlmacen(origenRaw);
+        let destino = normalizarAlmacen(destinoRaw);
 
-  if (res && res.status === 'success' && res.examen) {
-    generarPDFExamenBlanco(code, res.examen);
-  } else {
-    alert("La sala no existe o no tiene un examen registrado.");
-  }
+        let cantRaw = row["Total_Cantidad"] || row["Cantidad"] || 0;
+        let cantidad = parseFloat(cantRaw) || 0;
+
+        if (!prod || cantidad === 0) return;
+
+        // Registro de aplicaciones en campo (SALIDA hacia una zona de cultivo, no hacia un almacén)
+        if (op === "SALIDA" && !["Almacén de San Borja", "Almacén de Quilmana", "Almacén Fundo"].includes(destino)) {
+            aplicacionesGlobal.push({
+                fecha: row["Fecha Inventario"] || row["Fecha"],
+                producto: prod,
+                pa: pa,
+                lote: lote,
+                zona: destinoRaw,
+                usos: row["Objetivo Fitosanitario"],
+                cantidad: cantidad,
+                um: um
+            });
+        }
+
+        // Cálculo algorítmico de stock
+        const ALMACENES = ["Almacén de San Borja", "Almacén de Quilmana", "Almacén Fundo"];
+
+        function modificarStock(almacen, qty) {
+            if (!ALMACENES.includes(almacen)) return;
+            let key = `${prod}|${lote}|${almacen}`;
+            if (!stockMap[key]) {
+                stockMap[key] = { producto: prod, pa: pa, cat: cat, obj: obj, lote: lote, venc: venc, almacen: almacen, um: um, stock: 0 };
+            }
+            stockMap[key].stock += qty;
+        }
+
+        if (["ENTRADA", "TRASLADO ENTRADA", "TRASLADO ENTRADA CAMPO"].includes(op)) {
+            modificarStock(destino, cantidad);
+        } else if (["SALIDA", "TRASLADO SALIDA"].includes(op)) {
+            modificarStock(origen, -cantidad);
+        } else if (op === "TRASLADO") {
+            modificarStock(origen, -cantidad);
+            modificarStock(destino, cantidad);
+        } else if (op === "AJUSTE") {
+            let almAjuste = destino || origen;
+            let signo = (row["Observaciones"] || "").toLowerCase().includes("sobrante") ? 1 : -1;
+            modificarStock(almAjuste, cantidad * signo);
+        }
+    });
+
+    inventarioGlobal = Object.values(stockMap).filter(item => item.stock > 0);
+    inventarioGlobal.sort((a, b) => {
+        let parseDate = (d) => {
+            if (!d || d === "-") return new Date(9999, 11, 31);
+            let parts = d.split("/");
+            if (parts.length === 2) return new Date(parts[1], parts[0] - 1, 1);
+            return new Date(9999, 11, 31);
+        };
+        return parseDate(a.venc) - parseDate(b.venc);
+    });
+
+    aplicacionesGlobal.reverse();
+    filtrarDatos();
 }
 
-// ===== GENERACIÓN DE PDF EXAMEN EN BLANCO (ROBUSTO) =====
-function generarPDFExamenBlanco(codigoSala, examen) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+function filtrarDatos() {
+    let q = document.getElementById('searchInput').value.toUpperCase();
+    let filtroCatRaw = document.getElementById('filtroCategoria').value;
+    let alm = document.getElementById('filtroAlmacen').value;
 
-  if (!examen || examen.length === 0) {
-      alert("El examen no tiene preguntas registradas.");
-      return;
-  }
+    let htmlStock = "";
+    inventarioGlobal.forEach(item => {
+        let matchText = `${item.producto} ${item.lote} ${item.pa}`.includes(q);
+        let matchAlm = (alm === "TODOS" || item.almacen === alm);
 
-  // Cabecera del examen físico
-  doc.setFontSize(20);
-  doc.setTextColor(0, 0, 0);
-  doc.setFont("helvetica", "bold");
-  doc.text("Examen de Evaluación", 105, 20, null, null, "center");
-  
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "normal");
-  doc.text("Nombre del Alumno: __________________________________________________", 20, 35);
-  doc.text(`Código de Sala: ${codigoSala}`, 20, 45);
-  doc.text("Fecha: _____________________", 130, 45);
-  
-  doc.setDrawColor(0);
-  doc.line(20, 52, 190, 52);
+        // Lógica de filtrado anidado: CAT: filtra por Categoría, SUB: filtra por Objetivo Fitosanitario
+        let matchCat = true;
+        if (filtroCatRaw.startsWith("CAT:")) {
+            matchCat = (item.cat === filtroCatRaw.split(":")[1]);
+        } else if (filtroCatRaw.startsWith("SUB:")) {
+            matchCat = (item.obj === filtroCatRaw.split(":")[1]);
+        }
 
-  let y = 65;
-  
-  // Imprimir preguntas y alternativas completas
-  examen.forEach((q, qIndex) => {
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    
-    // Pregunta
-    const preguntaTexto = q.texto ? q.texto : "Pregunta no encontrada";
-    const splitQuestion = doc.splitTextToSize(`${qIndex + 1}. ${preguntaTexto}`, 170);
-    doc.text(splitQuestion, 20, y);
-    y += (splitQuestion.length * 6) + 2;
-    
-    // Alternativas completas (solo para opción múltiple)
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    
-    if (q.tipo === 'multiple' || !q.tipo) {
-      const opcionesClaves = ['A', 'B', 'C', 'D'];
-      const opcionesDisponibles = q.opciones || {}; 
-      
-      opcionesClaves.forEach(opt => {
-        const textoOpcion = `${opt}) ${opcionesDisponibles[opt] ? opcionesDisponibles[opt] : '_________'}`;
-        const splitOpcion = doc.splitTextToSize(textoOpcion, 160);
-        doc.text(splitOpcion, 25, y);
-        y += (splitOpcion.length * 6) + 2;
-      });
+        if (matchText && matchCat && matchAlm) {
+            let badgeClass = item.almacen.includes("San Borja") ? "san-borja" : item.almacen.includes("Quilmana") ? "quilmana" : "fundo";
+
+            htmlStock += `
+                <div class="card" onclick="mostrarDetalles('${item.producto.replace(/'/g, "\\'")}')" style="cursor: pointer; position: relative;">
+                    <div class="icono-info">ℹ️</div>
+                    <div class="card-title">${item.producto}</div>
+                    <div class="card-subtitle">${item.pa || '-'}</div>
+                    <div class="card-details">
+                        <div>
+                            <span class="badge ${badgeClass}">${item.almacen.replace('Almacén ', '').replace('de ', '')}</span><br>
+                            <span style="font-size:0.8rem; color:#7f8c8d; display:block; margin-top:5px;">Lote: ${item.lote || '-'}</span>
+                        </div>
+                        <div>
+                            <div class="stock-value">${item.stock.toFixed(2)} ${item.um}</div>
+                            <div class="fecha-venc" style="color: ${item.venc === '-' ? '#7f8c8d' : 'var(--danger)'}">Vence: ${item.venc}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    });
+
+    if(!htmlStock) htmlStock = "<div class='loading'>No se encontraron productos en stock.</div>";
+    document.getElementById('stockView').innerHTML = htmlStock;
+
+    let htmlCampo = "";
+    aplicacionesGlobal.forEach(item => {
+        let matchText = `${item.producto} ${item.lote} ${item.zona} ${item.usos}`.includes(q);
+        if (matchText) {
+            htmlCampo += `
+                <div class="card campo">
+                    <div style="display:flex; justify-content:space-between;">
+                        <div class="card-title">${item.producto}</div>
+                        <div style="font-size:0.8rem; color:#8E44AD; font-weight:bold;">${item.fecha}</div>
+                    </div>
+                    <div class="card-details" style="margin-top:8px;">
+                        <div>
+                            <strong>Zona:</strong> ${item.zona}<br>
+                            <strong>Lote:</strong> ${item.lote}
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="stock-value" style="color:#8E44AD;">${item.cantidad.toFixed(2)} ${item.um}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px; font-size:0.8rem; color:#555;">
+                        <strong>Objetivos:</strong> ${item.usos}
+                    </div>
+                </div>
+            `;
+        }
+    });
+
+    if(!htmlCampo) htmlCampo = "<div class='loading'>No se encontraron aplicaciones en campo.</div>";
+    document.getElementById('campoView').innerHTML = htmlCampo;
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view-section').forEach(v => v.style.display = 'none');
+
+    if(tab === 'stock') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        document.getElementById('stockView').style.display = 'block';
+    } else if(tab === 'campo') {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        document.getElementById('campoView').style.display = 'block';
     } else {
-      // Pregunta abierta: líneas para escribir
-      doc.text("Respuesta:", 25, y);
-      y += 8;
-      for (let l = 0; l < 4; l++) {
-        doc.line(25, y, 185, y);
-        y += 8;
-      }
+        document.querySelectorAll('.tab-btn')[2].classList.add('active');
+        document.getElementById('reporteView').style.display = 'block';
     }
-    
-    y += 8; // Espacio extra entre preguntas
-    
-    // Salto de página preventivo para evitar que se corte el texto
-    if (y > 270) {
-      doc.addPage();
-      y = 20;
-    }
-  });
-
-  doc.save(`Examen_Blanco_Sala_${codigoSala}.pdf`);
 }
 
-// ===== MOTOR ANTI-TRAMPAS (ADVERTENCIA LIMPIA EN LA 1RA, CASTIGO DESDE LA 2DA) =====
-// 1. Detectar si minimiza o cambia de pestaña
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden && isExamActive) {
-    handleCheatWarning("Cambiaste de pestaña o minimizaste el navegador.");
-  }
-});
+function generarReporteCampo() {
+    let desde = document.getElementById('fechaDesde').value;
+    let hasta = document.getElementById('fechaHasta').value;
 
-// 2. Detectar si abre otra app en pantalla dividida o pierde el foco
-window.addEventListener("blur", () => {
-  if (isExamActive) {
-    handleCheatWarning("Saliste de la pantalla de la evaluación.");
-  }
-});
+    if (!desde || !hasta) {
+        document.getElementById('reporteContenido').innerHTML = "<div class='loading' style='color:var(--danger);'>Por favor seleccione fecha de inicio y fin.</div>";
+        return;
+    }
 
-// 3. Bloqueos de teclado y mouse (solo activos durante el examen)
-document.addEventListener('contextmenu', event => { if(isExamActive) event.preventDefault(); });
-document.addEventListener('copy', event => { if(isExamActive) event.preventDefault(); });
-document.addEventListener('paste', event => { if(isExamActive) event.preventDefault(); });
+    let dDesde = new Date(desde + 'T00:00:00');
+    let dHasta = new Date(hasta + 'T23:59:59');
 
-function handleCheatWarning(motivo) {
-  cheatWarnings++;
-  
-  // PRIMERA INFRACCIÓN: Solo advertencia, no hay penalidad ni salto
-  if (cheatWarnings === 1) {
-    alert(`¡ADVERTENCIA ANTI-TRAMPA (1/2)!\nMotivo: ${motivo}\n\nEstá prohibido salir de la ventana de la evaluación. A tu próxima infracción, la pregunta en la que estés será ANULADA y se restarán 2 puntos de tu calificación global.`);
-    return; // Detiene la función aquí para no castigar aún
-  }
+    let appsFiltradas = aplicacionesGlobal.filter(app => {
+        let parts = app.fecha.split('/');
+        if (parts.length !== 3) return false;
+        let dApp = new Date(parts[2], parts[1] - 1, parts[0]);
+        return dApp >= dDesde && dApp <= dHasta;
+    });
 
-  // SEGUNDA Y TERCERA INFRACCIÓN: Se aplica la penalidad
-  // 1. Guardar la pregunta actual como anulada
-  const qActual = currentExamData[currentQuestionIndex];
-  temporalRespuestas[qActual.id] = "ANULADA (Infracción)";
+    if (appsFiltradas.length === 0) {
+        document.getElementById('reporteContenido').innerHTML = "<div class='loading'>No hay aplicaciones en este rango de fechas.</div>";
+        return;
+    }
 
-  // 2. Sumar 2 puntos negativos al contador global
-  if (!gameState.penalidadTrampa) gameState.penalidadTrampa = 0;
-  gameState.penalidadTrampa -= 2;
+    let html = `
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Reactivo (Producto)</th>
+                    <th>Campo / Zona</th>
+                    <th>Uso / Objetivo</th>
+                    <th>Volumen Total</th>
+                    <th>Prorrateo (Dosis/Árbol)</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
 
-  // 3. Evaluar si es la segunda (salto) o tercera (cierre total)
-  if (cheatWarnings === 2) {
-    alert(`¡ADVERTENCIA ANTI-TRAMPA (2/2)!\nMotivo: ${motivo}\n\nLa pregunta actual ha sido ANULADA y se han RESTADO 2 puntos de tu calificación global. A tu próxima infracción tu examen será cancelado por completo.`);
-    
-    // Forzar el salto a la siguiente pregunta si no es la última
-    if (currentQuestionIndex < totalQuestions - 1) {
-      clearInterval(timerInterval);
-      currentQuestionIndex++;
-      renderCurrentQuestion();
+    appsFiltradas.forEach(app => {
+        let nombreZona = app.zona.toUpperCase();
+        let numArboles = zonasGlobal[nombreZona] || 0;
+        let prorrateoTxt = numArboles > 0 ? (app.cantidad / numArboles).toFixed(4) + " " + app.um : "Faltan datos de Zona";
+
+        html += `
+            <tr>
+                <td>${app.fecha}</td>
+                <td><strong>${app.producto}</strong><br><span style="font-size:0.75rem; color:#777;">${app.pa}</span></td>
+                <td>${app.zona}</td>
+                <td>${app.usos}</td>
+                <td style="font-weight:bold; color:var(--dark);">${app.cantidad.toFixed(2)} ${app.um}</td>
+                <td style="color:var(--primary); font-weight:bold;">${prorrateoTxt}</td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table>`;
+    document.getElementById('reporteContenido').innerHTML = html;
+}
+
+/* ================= Lógica del Modal ================= */
+function mostrarDetalles(productoNombre) {
+    let usosDelProducto = usosGlobal.filter(u => (u["Producto"] || "").trim().toUpperCase() === productoNombre);
+
+    let modalBody = document.getElementById('modalBody');
+    document.getElementById('modalTitle').innerText = `📋 Especificaciones:\n${productoNombre}`;
+
+    if (usosDelProducto.length === 0) {
+        modalBody.innerHTML = "<p style='color: #7F8C8D; font-size: 0.9rem; text-align: center; margin-top: 10px;'>No hay usos o especificaciones registradas para este producto.</p>";
     } else {
-      finishExam(); // Si hizo trampa en la última pregunta, se envía
+        let htmlUsos = "";
+        usosDelProducto.forEach(u => {
+            let uso = (u["Uso_Objetivo"] || u["Uso/Objetivo"] || "Uso General").trim();
+            let detalles = u["Detalles"] || "";
+            htmlUsos += `
+                <div class="uso-item">
+                    <strong>🎯 ${uso}</strong>
+                    ${detalles ? `<p>${detalles}</p>` : ''}
+                </div>
+            `;
+        });
+        modalBody.innerHTML = htmlUsos;
     }
-  } 
-  else if (cheatWarnings >= 3) {
-    alert(`¡INFRACCIÓN CRÍTICA!\nMotivo: ${motivo}\n\nHas superado el límite de advertencias permitidas. Tu evaluación ha sido cancelada.\nSe han descontado 2 puntos adicionales por esta infracción.`);
-    finishExam(); // Fuerza el envío inmediato y cierre de la evaluación
-  }
+
+    document.getElementById('detallesModal').style.display = 'block';
 }
 
-// Registro PWA
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js');
+function cerrarModal() {
+    document.getElementById('detallesModal').style.display = 'none';
+}
+
+window.onclick = function(event) {
+    if (event.target == document.getElementById('detallesModal')) {
+        cerrarModal();
+    }
 }

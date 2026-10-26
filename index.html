@@ -1,95 +1,89 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>EvaluaPro - Plataforma Interactiva</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="manifest" href="manifest.json">
-  <!-- jsPDF y AutoTable para reportes ordenados -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AgroGest+ Móvil</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2C3E50">
+    <link rel="stylesheet" href="style.css">
+    <!-- PapaParse para procesar el CSV de forma segura -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
 <body>
+    <header class="app-header">
+        <h1>🌱 AgroGest+</h1>
+        <p class="subtitle">Control Fitosanitario en Tiempo Real</p>
+    </header>
 
-  <!-- SPINNER -->
-  <div id="loader" class="hidden">
-    <div class="spinner"></div>
-    <p>Procesando...</p>
-  </div>
-
-  <!-- INICIO -->
-  <div id="view-home" class="view">
-    <h1 id="app-title">Plataforma de Evaluación</h1>
-    <button onclick="showView('view-student-login')" class="btn primary">Soy Alumno</button>
-    <button onclick="showView('view-teacher-login')" class="btn secondary">Soy Docente</button>
-  </div>
-
-  <!-- LOGIN DOCENTE -->
-  <div id="view-teacher-login" class="view hidden">
-    <h2>Acceso Docente</h2>
-    <input type="password" id="teacher-pass" placeholder="Contraseña">
-    <button onclick="loginTeacher()" class="btn primary">Ingresar</button>
-    <button onclick="showView('view-home')" class="btn secondary">Volver</button>
-  </div>
-
-  <!-- DASHBOARD DOCENTE -->
-  <div id="view-teacher-dashboard" class="view hidden">
-    <h2>Crear Nuevo Examen</h2>
-    <input type="text" id="exam-code" placeholder="Código de Sala (Ej. SALA01)" required>
-    <input type="number" id="exam-time" placeholder="Tiempo en minutos" required>
-    
-    <div id="questions-container"></div>
-    <button onclick="submitExamCreation()" class="btn primary">Crear Sala</button>
-    
-    <hr style="margin: 30px 0;">
-    <h2>Descargar Reportes y Exámenes</h2>
-    <input type="text" id="report-code" placeholder="Código de Sala para descargar">
-    <button onclick="downloadTeacherReport()" class="btn report-btn">Descargar Reporte PDF (Calificaciones)</button>
-    <button onclick="downloadBlankExam()" class="btn secondary" style="background-color: #27ae60; color: white;">Descargar Examen en Blanco (Imprimible)</button>
-
-    <button onclick="showView('view-home')" class="btn secondary" style="margin-top: 20px;">Salir al Inicio</button>
-  </div>
-
-  <!-- LOGIN ALUMNO -->
-  <div id="view-student-login" class="view hidden">
-    <h2>Ingreso al Examen</h2>
-    <input type="text" id="student-name" placeholder="Tu Nombre Completo" required>
-    <input type="text" id="student-code" placeholder="Código de Sala" required>
-    <button onclick="loginStudent()" class="btn primary">Entrar a la Sala</button>
-    <button onclick="showView('view-home')" class="btn secondary">Volver</button>
-  </div>
-
-  <!-- EXAMEN ALUMNO -->
-  <div id="view-exam" class="view hidden">
-    <div class="header-exam">
-      <h3 id="display-student"></h3>
-      <div>
-        <span style="font-size: 12px; color: #777;">Tiempo restante:</span>
-        <div id="timer" class="timer">--:--</div>
-      </div>
-    </div>
-    
-    <div class="progress-bar-container">
-      <div id="exam-progress" class="progress-bar"></div>
+    <div class="controls">
+        <input type="text" id="searchInput" placeholder="🔍 Buscar producto, lote o P.A..." onkeyup="filtrarDatos()">
+        <div class="filters">
+            <select id="filtroCategoria" onchange="filtrarDatos()">
+                <option value="ALL">Categoría: Todas</option>
+                <option value="CAT:SUELO">Suelo</option>
+                <option value="CAT:PESTICIDAS">Pesticidas</option>
+                <option value="SUB:ACARICIDAS">&nbsp;&nbsp;&nbsp;↳ Acaricidas</option>
+                <option value="SUB:FUNGICIDAS">&nbsp;&nbsp;&nbsp;↳ Fungicidas</option>
+                <option value="SUB:HERBICIDAS">&nbsp;&nbsp;&nbsp;↳ Herbicidas</option>
+                <option value="SUB:INSECTICIDAS">&nbsp;&nbsp;&nbsp;↳ Insecticidas</option>
+                <option value="CAT:FOLIARES">Foliares</option>
+                <option value="SUB:BIOESTIMULANTES">&nbsp;&nbsp;&nbsp;↳ Bioestimulantes</option>
+                <option value="SUB:CORRECTORES">&nbsp;&nbsp;&nbsp;↳ Correctores</option>
+                <option value="SUB:NUTRIENTES">&nbsp;&nbsp;&nbsp;↳ Nutrientes</option>
+                <option value="SUB:REGULADORES DE CRECIMIENTO">&nbsp;&nbsp;&nbsp;↳ Reg. Crecimiento</option>
+                <option value="CAT:OTROS">Otros</option>
+            </select>
+            <select id="filtroAlmacen" onchange="filtrarDatos()">
+                <option value="TODOS">Almacén: Todos</option>
+                <option value="Almacén de San Borja">San Borja</option>
+                <option value="Almacén de Quilmana">Quilmaná</option>
+                <option value="Almacén Fundo">Fundo</option>
+            </select>
+        </div>
     </div>
 
-    <!-- El contenedor donde se inyectará 1 pregunta a la vez -->
-    <div id="student-questions-container"></div>
-    
-    <!-- Botones de Navegación Dinámicos -->
-    <button id="btn-next-question" onclick="nextQuestion()" class="btn secondary" style="display: none; background-color: #27ae60; color: white;">Siguiente Pregunta ➔</button>
-    <button id="btn-finish-exam" onclick="finishExam()" class="btn primary finish-btn" style="display: none;">Finalizar y Enviar Examen</button>
-  </div>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('stock')">📦 Stock</button>
+        <button class="tab-btn" onclick="switchTab('campo')">🚜 Campo</button>
+        <button class="tab-btn" onclick="switchTab('reporte')">📊 Reporte</button>
+    </div>
 
-  <!-- RESULTADO GIGANTE ALUMNO -->
-  <div id="view-result" class="view hidden">
-    <h2>¡Evaluación Enviada!</h2>
-    <p>Tu calificación automática es:</p>
-    <div class="massive-score"><span id="final-score-number"></span> / 20</div>
-    <button onclick="showView('view-home')" class="btn secondary">Cerrar Sesión</button>
-  </div>
+    <main id="app-content">
+        <div id="loading" class="loading">Sincronizando bases de datos...</div>
 
-  <script src="app.js"></script>
+        <div id="stockView" class="view-section active"></div>
+        <div id="campoView" class="view-section" style="display: none;"></div>
+
+        <!-- Nueva vista de Reportes -->
+        <div id="reporteView" class="view-section" style="display: none;">
+            <div class="report-filters">
+                <label>Desde: <input type="date" id="fechaDesde"></label>
+                <label>Hasta: <input type="date" id="fechaHasta"></label>
+                <button onclick="generarReporteCampo()" class="btn-generar">Generar Reporte</button>
+            </div>
+            <div id="reporteContenido" style="margin-top: 15px; overflow-x: auto;">
+                <div class="loading">Seleccione un rango de fechas y presione "Generar Reporte".</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Flotante de Especificaciones -->
+    <div id="detallesModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarModal()">&times;</span>
+            <h2 id="modalTitle">Producto</h2>
+            <div id="modalBody">
+                <!-- El contenido se inyectará aquí con JS -->
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
 </body>
 </html>
