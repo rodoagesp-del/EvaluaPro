@@ -17,7 +17,7 @@
     </header>
 
     <div class="controls">
-        <input type="text" id="searchInput" placeholder="🔍 Buscar producto, lote o P.A..." onkeyup="filtrarDatos()">
+        <input type="text" id="searchInput" placeholder="🔍 Buscar producto, lote, P.A. o zona..." onkeyup="filtrarDatos()">
         <div class="filters">
             <select id="filtroCategoria" onchange="filtrarDatos()">
                 <option value="ALL">Categoría: Todas</option>
@@ -39,6 +39,11 @@
                 <option value="Almacén de San Borja">San Borja</option>
                 <option value="Almacén de Quilmana">Quilmaná</option>
                 <option value="Almacén Fundo">Fundo</option>
+            </select>
+            <!-- NUEVO FILTRO DE CAMPOS -->
+            <select id="filtroCampo" onchange="filtrarDatos()" style="display: none;">
+                <option value="TODOS">Campo: Todos</option>
+                <!-- Se llenará dinámicamente con JS -->
             </select>
         </div>
     </div>

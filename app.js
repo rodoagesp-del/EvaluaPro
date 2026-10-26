@@ -1,14 +1,13 @@
 // Enlaces a los Google Sheets (CSV)
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQpvGU5GwEfk6hK5A9eiO5-moXq9gxlxywtrXEfc63vaxGw6xDGAsCVkiUEJUH3uiBz1MrxVFqgKKaL/pub?gid=1727735409&single=true&output=csv';
 const USOS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTGndkXKibFfCovjtznlsbD4V9AiU593xd_3KSwoLOjppTMBFiEHWaG2zEMDWVPkSnUno7wdHU8Cca-/pub?gid=1408750423&single=true&output=csv';
-
-// 👇 PEGA AQUÍ EL ENLACE DEL ARCHIVO "zonas_agricolas.xlsx" PUBLICADO COMO CSV
-const ZONAS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBeeBtO4H6JIiEGwzlQLDVPIB2tWO-N83j6xt34j4RCqhz_1FF0jiWkXLbcKQy7naM6u_GRoLveSp7/pubhtml?gid=1473578018&single=true';
+const ZONAS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRBeeBtO4H6JIiEGwzlQLDVPIB2tWO-N83j6xt34j4RCqhz_1FF0jiWkXLbcKQy7naM6u_GRoLveSp7/pub?gid=1473578018&single=true&output=csv';
 
 let inventarioGlobal = [];
 let aplicacionesGlobal = [];
 let usosGlobal = [];
 let zonasGlobal = {};
+let camposNombres = new Set(); // Para poblar el select dinámicamente
 
 const ALMACENES_MAP = {
     "ALMACÉN DE SAN BORJA": "Almacén de San Borja",
@@ -47,18 +46,32 @@ function cargarUsos() {
 }
 
 function cargarZonas() {
-    if (!ZONAS_CSV_URL || ZONAS_CSV_URL === 'AQUI_PONER_EL_NUEVO_ENLACE_CSV_DE_ZONAS') {
+    if (!ZONAS_CSV_URL) {
         document.getElementById('loading').style.display = 'none';
         return;
     }
     Papa.parse(ZONAS_CSV_URL, {
         download: true, header: true, skipEmptyLines: true, transformHeader: h => h.trim(),
         complete: function(results) {
+            let selectCampo = document.getElementById("filtroCampo");
             results.data.forEach(r => {
                 let nombreSector = (r["Nombre_Sector"] || r["Nombre del Sector"] || "").trim().toUpperCase();
                 let arboles = parseFloat(r["Num_Arboles"] || r["Número de Árboles"]) || 0;
-                if (nombreSector) zonasGlobal[nombreSector] = arboles;
+                if (nombreSector) {
+                    zonasGlobal[nombreSector] = arboles;
+                    camposNombres.add(nombreSector);
+                }
             });
+            // Llenar el select con los campos recuperados (ordenados alfabéticamente)
+            Array.from(camposNombres).sort().forEach(campo => {
+                let opt = document.createElement("option");
+                opt.value = campo;
+                opt.innerHTML = campo;
+                selectCampo.appendChild(opt);
+            });
+            document.getElementById('loading').style.display = 'none';
+        },
+        error: function() {
             document.getElementById('loading').style.display = 'none';
         }
     });
@@ -116,14 +129,13 @@ function procesarDatos(data) {
                 producto: prod,
                 pa: pa,
                 lote: lote,
-                zona: destinoRaw,
+                zona: destinoRaw.trim().toUpperCase(),
                 usos: row["Objetivo Fitosanitario"],
                 cantidad: cantidad,
                 um: um
             });
         }
 
-        // Cálculo algorítmico de stock
         const ALMACENES = ["Almacén de San Borja", "Almacén de Quilmana", "Almacén Fundo"];
 
         function modificarStock(almacen, qty) {
@@ -168,13 +180,14 @@ function filtrarDatos() {
     let q = document.getElementById('searchInput').value.toUpperCase();
     let filtroCatRaw = document.getElementById('filtroCategoria').value;
     let alm = document.getElementById('filtroAlmacen').value;
+    let filtroCamp = document.getElementById('filtroCampo').value;
 
+    // --- FILTRADO DE STOCK ---
     let htmlStock = "";
     inventarioGlobal.forEach(item => {
         let matchText = `${item.producto} ${item.lote} ${item.pa}`.includes(q);
         let matchAlm = (alm === "TODOS" || item.almacen === alm);
 
-        // Lógica de filtrado anidado: CAT: filtra por Categoría, SUB: filtra por Objetivo Fitosanitario
         let matchCat = true;
         if (filtroCatRaw.startsWith("CAT:")) {
             matchCat = (item.cat === filtroCatRaw.split(":")[1]);
@@ -208,10 +221,13 @@ function filtrarDatos() {
     if(!htmlStock) htmlStock = "<div class='loading'>No se encontraron productos en stock.</div>";
     document.getElementById('stockView').innerHTML = htmlStock;
 
+    // --- FILTRADO DE CAMPO ---
     let htmlCampo = "";
     aplicacionesGlobal.forEach(item => {
         let matchText = `${item.producto} ${item.lote} ${item.zona} ${item.usos}`.includes(q);
-        if (matchText) {
+        let matchCamp = (filtroCamp === "TODOS" || item.zona === filtroCamp);
+        
+        if (matchText && matchCamp) {
             htmlCampo += `
                 <div class="card campo">
                     <div style="display:flex; justify-content:space-between;">
@@ -237,6 +253,11 @@ function filtrarDatos() {
 
     if(!htmlCampo) htmlCampo = "<div class='loading'>No se encontraron aplicaciones en campo.</div>";
     document.getElementById('campoView').innerHTML = htmlCampo;
+    
+    // Si estamos en la vista reporte, regenerar tabla al cambiar filtros
+    if (document.getElementById('reporteView').style.display === 'block') {
+        generarReporteCampo();
+    }
 }
 
 function switchTab(tab) {
@@ -246,18 +267,28 @@ function switchTab(tab) {
     if(tab === 'stock') {
         document.querySelectorAll('.tab-btn')[0].classList.add('active');
         document.getElementById('stockView').style.display = 'block';
+        document.getElementById('filtroAlmacen').style.display = 'inline-block';
+        document.getElementById('filtroCampo').style.display = 'none';
+        document.getElementById('filtroCategoria').style.display = 'inline-block';
     } else if(tab === 'campo') {
         document.querySelectorAll('.tab-btn')[1].classList.add('active');
         document.getElementById('campoView').style.display = 'block';
+        document.getElementById('filtroAlmacen').style.display = 'none';
+        document.getElementById('filtroCampo').style.display = 'inline-block';
+        document.getElementById('filtroCategoria').style.display = 'none';
     } else {
         document.querySelectorAll('.tab-btn')[2].classList.add('active');
         document.getElementById('reporteView').style.display = 'block';
+        document.getElementById('filtroAlmacen').style.display = 'none';
+        document.getElementById('filtroCampo').style.display = 'inline-block';
+        document.getElementById('filtroCategoria').style.display = 'none';
     }
 }
 
 function generarReporteCampo() {
     let desde = document.getElementById('fechaDesde').value;
     let hasta = document.getElementById('fechaHasta').value;
+    let filtroCamp = document.getElementById('filtroCampo').value;
 
     if (!desde || !hasta) {
         document.getElementById('reporteContenido').innerHTML = "<div class='loading' style='color:var(--danger);'>Por favor seleccione fecha de inicio y fin.</div>";
@@ -268,14 +299,20 @@ function generarReporteCampo() {
     let dHasta = new Date(hasta + 'T23:59:59');
 
     let appsFiltradas = aplicacionesGlobal.filter(app => {
+        // Filtrar por fecha
         let parts = app.fecha.split('/');
         if (parts.length !== 3) return false;
         let dApp = new Date(parts[2], parts[1] - 1, parts[0]);
-        return dApp >= dDesde && dApp <= dHasta;
+        let matchFecha = dApp >= dDesde && dApp <= dHasta;
+        
+        // Filtrar por campo
+        let matchCamp = (filtroCamp === "TODOS" || app.zona === filtroCamp);
+        
+        return matchFecha && matchCamp;
     });
 
     if (appsFiltradas.length === 0) {
-        document.getElementById('reporteContenido').innerHTML = "<div class='loading'>No hay aplicaciones en este rango de fechas.</div>";
+        document.getElementById('reporteContenido').innerHTML = "<div class='loading'>No hay aplicaciones para los filtros seleccionados.</div>";
         return;
     }
 
@@ -295,7 +332,7 @@ function generarReporteCampo() {
     `;
 
     appsFiltradas.forEach(app => {
-        let nombreZona = app.zona.toUpperCase();
+        let nombreZona = app.zona; // Ya fue convertido a mayúsculas en procesarDatos
         let numArboles = zonasGlobal[nombreZona] || 0;
         let prorrateoTxt = numArboles > 0 ? (app.cantidad / numArboles).toFixed(4) + " " + app.um : "Faltan datos de Zona";
 
