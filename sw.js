@@ -1,52 +1,33 @@
-const CACHE_NAME = 'agrogest-pwa-v9'; // <--- VERSIÓN ACTUALIZADA (V9)
-const ASSETS = [
-    './',
-    './index.html',
-    './style.css',
-    './app.js',
-    './manifest.json'
+const CACHE_NAME = 'evalua-cache-v5'; // ¡Cambiado a v5 para forzar actualización!
+const urlsToCache = [
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];
 
-// Instala la nueva versión
 self.addEventListener('install', event => {
-    event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => {
-            return cache.addAll(ASSETS);
-        })
-    );
-    self.skipWaiting(); // Fuerza a que esta versión tome el control
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+  );
+  self.skipWaiting(); // Fuerza la activación inmediata del nuevo SW
 });
 
-// Borra la memoria caché antigua
 self.addEventListener('activate', event => {
-    event.waitUntil(
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames.map(cache => {
-                    if (cache !== CACHE_NAME) {
-                        return caches.delete(cache);
-                    }
-                })
-            );
-        })
-    );
-    self.clients.claim();
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))
+      );
+    })
+  );
+  self.clients.claim(); // Toma control de las pestañas abiertas
 });
 
-// Estrategia "Network First" (Primero Red, luego Caché) para TODO
 self.addEventListener('fetch', event => {
-    event.respondWith(
-        fetch(event.request)
-            .then(networkResponse => {
-                // Si hay internet, actualiza la caché con la nueva versión
-                return caches.open(CACHE_NAME).then(cache => {
-                    cache.put(event.request, networkResponse.clone());
-                    return networkResponse;
-                });
-            })
-            .catch(() => {
-                // Si no hay internet (fundo/campo), usa la memoria guardada
-                return caches.match(event.request);
-            })
-    );
+  event.respondWith(
+    caches.match(event.request).then(response => response || fetch(event.request))
+  );
 });
