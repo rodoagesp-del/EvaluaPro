@@ -1,4 +1,4 @@
-const CACHE_NAME = 'evalua-cache-v5'; // ¡Cambiado a v5 para forzar actualización!
+const CACHE_NAME = 'evalua-cache-v8'; // ¡Cambiado a v8!
 const urlsToCache = [
   './',
   './index.html',

@@ -405,6 +405,14 @@ function nextQuestion() {
 }
 
 async function finishExam() {
+  // 1. BLOQUEAR EL BOTÓN INMEDIATAMENTE
+  const btnFinish = document.getElementById('btn-finish-exam');
+  if (btnFinish.disabled) return; 
+  
+  btnFinish.disabled = true; 
+  const originalText = btnFinish.innerHTML;
+  btnFinish.innerHTML = '⏳ Enviando Evaluación...';
+  
   clearInterval(timerInterval);
   isExamActive = false; // DETENER VIGILANCIA ANTI-TRAMPA
   
@@ -426,7 +434,6 @@ async function finishExam() {
       const valor = temporalRespuestas[pregunta.id];
       if (valor === pregunta.correcta) puntaje += 4; 
     }
-    // Las preguntas abiertas no se califican automáticamente
   });
 
   // Aplicar las penalizaciones acumuladas por trampa
@@ -438,22 +445,29 @@ async function finishExam() {
   if (puntaje < 0) puntaje = 0;
 
   showLoader(true);
-  const res = await postData({
-    action: 'enviar_examen', codigoSala: currentRoomCode,
-    nombreAlumno: currentStudentName, respuestas: temporalRespuestas, puntaje: puntaje
-  });
-  showLoader(false);
+  
+  try {
+      const res = await postData({
+        action: 'enviar_examen', codigoSala: currentRoomCode,
+        nombreAlumno: currentStudentName, respuestas: temporalRespuestas, puntaje: puntaje
+      });
+      showLoader(false);
 
-  if (res && res.status === 'success') {
-    // Guardar variables globales para el PDF o referencias
-    myLastPuntaje = puntaje;
-    myLastRespuestas = temporalRespuestas;
-    
-    // Mostrar nota gigante
-    document.getElementById('final-score-number').innerText = puntaje;
-    showView('view-result');
-  } else {
-    alert("Error al enviar su evaluación. Intente nuevamente.");
+      if (res && res.status === 'success') {
+        myLastPuntaje = puntaje;
+        myLastRespuestas = temporalRespuestas;
+        
+        document.getElementById('final-score-number').innerText = puntaje;
+        showView('view-result');
+      } else {
+        throw new Error("El servidor devolvió un error al guardar el examen.");
+      }
+  } catch (error) {
+      // 2. REHABILITAR EL BOTÓN SI EL ENVÍO FALLA
+      showLoader(false);
+      btnFinish.disabled = false;
+      btnFinish.innerHTML = originalText;
+      alert("Error de conexión al enviar su evaluación. Su internet podría estar fallando. Por favor, intente enviarlo nuevamente.");
   }
 }
 
