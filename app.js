@@ -77,7 +77,7 @@ function renderQuestionsForm() {
           <option value="text">Respuesta Abierta (Texto)</option>
         </select>
         
-        <textarea id="q${i}-text" rows="4" class="w-full p-2 border rounded mb-2" placeholder="Texto de la Pregunta (Para entrelazar, escribe aquí los números y las letras a relacionar)" required></textarea>
+        <textarea id="q${i}-text" rows="2" class="w-full p-2 border rounded mb-2" placeholder="Enunciado de la Pregunta" required></textarea>
         
         <!-- Opciones para Opción Múltiple -->
         <div id="q${i}-multiple-options">
@@ -91,9 +91,28 @@ function renderQuestionsForm() {
           </select>
         </div>
 
-        <!-- Opciones para Entrelazar Conceptos -->
+        <!-- Opciones para Entrelazar Conceptos (NUEVO FORMATO COLUMNAS) -->
         <div id="q${i}-match-options" class="hidden bg-indigo-50 p-3 rounded border border-indigo-200 mb-2">
-          <p class="text-sm font-bold text-indigo-800 mb-2">Clave correcta (Ingresa la letra para cada número):</p>
+          <p class="text-sm font-bold text-indigo-800 mb-2">Construye las columnas para relacionar:</p>
+          
+          <div class="grid grid-cols-2 gap-2 mb-3">
+             <div>
+                <p class="text-xs font-bold text-gray-700 mb-1">Conceptos (Números)</p>
+                <input type="text" id="q${i}-m-c1" placeholder="1." class="w-full text-sm p-1 border rounded mb-1">
+                <input type="text" id="q${i}-m-c2" placeholder="2." class="w-full text-sm p-1 border rounded mb-1">
+                <input type="text" id="q${i}-m-c3" placeholder="3." class="w-full text-sm p-1 border rounded mb-1">
+                <input type="text" id="q${i}-m-c4" placeholder="4." class="w-full text-sm p-1 border rounded">
+             </div>
+             <div>
+                <p class="text-xs font-bold text-gray-700 mb-1">Definiciones (Letras)</p>
+                <input type="text" id="q${i}-m-d1" placeholder="a)" class="w-full text-sm p-1 border rounded mb-1">
+                <input type="text" id="q${i}-m-d2" placeholder="b)" class="w-full text-sm p-1 border rounded mb-1">
+                <input type="text" id="q${i}-m-d3" placeholder="c)" class="w-full text-sm p-1 border rounded mb-1">
+                <input type="text" id="q${i}-m-d4" placeholder="d)" class="w-full text-sm p-1 border rounded">
+             </div>
+          </div>
+          
+          <p class="text-sm font-bold text-indigo-800 mb-2 border-t pt-2 border-indigo-200">Clave correcta (Ingresa la letra para cada número):</p>
           <div class="flex justify-around items-center">
             <div><span class="font-bold">1-</span><input type="text" id="q${i}-m1" class="w-10 text-center uppercase font-bold border border-gray-400 rounded" maxlength="1"></div>
             <div><span class="font-bold">2-</span><input type="text" id="q${i}-m2" class="w-10 text-center uppercase font-bold border border-gray-400 rounded" maxlength="1"></div>
@@ -153,6 +172,18 @@ async function submitExamCreation() {
         correcta: document.getElementById(`q${i}-correct`).value
       });
     } else if (tipo === 'match') {
+      // Recoger los conceptos y definiciones
+      const c1 = document.getElementById(`q${i}-m-c1`).value;
+      const c2 = document.getElementById(`q${i}-m-c2`).value;
+      const c3 = document.getElementById(`q${i}-m-c3`).value;
+      const c4 = document.getElementById(`q${i}-m-c4`).value;
+      
+      const d1 = document.getElementById(`q${i}-m-d1`).value;
+      const d2 = document.getElementById(`q${i}-m-d2`).value;
+      const d3 = document.getElementById(`q${i}-m-d3`).value;
+      const d4 = document.getElementById(`q${i}-m-d4`).value;
+
+      // Recoger las claves
       const m1 = document.getElementById(`q${i}-m1`).value.toUpperCase();
       const m2 = document.getElementById(`q${i}-m2`).value.toUpperCase();
       const m3 = document.getElementById(`q${i}-m3`).value.toUpperCase();
@@ -165,7 +196,12 @@ async function submitExamCreation() {
       if(m4) corr.push(`4-${m4}`);
       
       preguntas.push({
-        id: i, tipo: 'match', texto: textoPregunta, opciones: null, correcta: corr.join(', ')
+        id: i, tipo: 'match', texto: textoPregunta, 
+        opciones: {
+            conceptos: [c1, c2, c3, c4].filter(Boolean), // Filtra los vacíos
+            definiciones: [d1, d2, d3, d4].filter(Boolean)
+        }, 
+        correcta: corr.join(', ')
       });
     } else {
       preguntas.push({ id: i, tipo: 'text', texto: textoPregunta, opciones: null, correcta: 'MANUAL' });
@@ -370,7 +406,21 @@ function renderCurrentQuestion() {
       <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="D" style="display:none;"> D) ${opciones.D || ''}</label>
     `;
   } else if (q.tipo === 'match') {
+    const conceptosHTML = (q.opciones?.conceptos || []).map((c, idx) => `<p class="text-sm mb-1"><strong>${idx + 1}.</strong> ${c}</p>`).join('');
+    const letrasDef = ['a', 'b', 'c', 'd'];
+    const definicionesHTML = (q.opciones?.definiciones || []).map((d, idx) => `<p class="text-sm mb-1"><strong>${letrasDef[idx]})</strong> ${d}</p>`).join('');
+
     interactableHTML = `
+      <div class="bg-white border border-gray-300 rounded-lg p-3 mb-4 flex flex-col md:flex-row gap-4">
+          <div class="flex-1">
+              <h5 class="font-bold text-indigo-700 mb-2 border-b">Conceptos</h5>
+              ${conceptosHTML}
+          </div>
+          <div class="flex-1">
+              <h5 class="font-bold text-indigo-700 mb-2 border-b">Definiciones</h5>
+              ${definicionesHTML}
+          </div>
+      </div>
       <div class="bg-gray-50 p-4 rounded-lg border border-indigo-200 shadow-sm">
         <p class="font-bold text-sm text-gray-700 mb-4 text-center">Escribe la letra correspondiente a cada número:</p>
         <div class="flex justify-around items-center">
@@ -387,7 +437,6 @@ function renderCurrentQuestion() {
     `;
   }
 
-  // Pre-formatear el texto de la pregunta para respetar saltos de línea visualmente
   const textoPreguntaFormat = q.texto.replace(/\n/g, '<br>');
 
   container.innerHTML = `
