@@ -1,4 +1,4 @@
-const CACHE_NAME = 'evalua-cache-v9'; // ¡Cambiado a v9!
+const CACHE_NAME = 'evalua-cache-v11';
 const urlsToCache = [
   './',
   './index.html',

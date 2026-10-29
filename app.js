@@ -71,12 +71,13 @@ function renderQuestionsForm() {
     container.innerHTML += `
       <div class="q-block">
         <h4>Pregunta ${i}</h4>
-        <select id="q${i}-type" onchange="toggleQuestionType(${i})" class="mb-2 font-bold text-indigo-700 bg-indigo-50">
+        <select id="q${i}-type" onchange="toggleQuestionType(${i})" class="mb-2 font-bold text-indigo-700 bg-indigo-50 w-full p-2 border rounded">
           <option value="multiple">Opción Múltiple</option>
+          <option value="match">Entrelazar Conceptos (Relacionar)</option>
           <option value="text">Respuesta Abierta (Texto)</option>
         </select>
         
-        <input type="text" id="q${i}-text" placeholder="Texto de la Pregunta" required>
+        <textarea id="q${i}-text" rows="4" class="w-full p-2 border rounded mb-2" placeholder="Texto de la Pregunta (Para entrelazar, escribe aquí los números y las letras a relacionar)" required></textarea>
         
         <!-- Opciones para Opción Múltiple -->
         <div id="q${i}-multiple-options">
@@ -88,6 +89,17 @@ function renderQuestionsForm() {
             <option value="A">Clave: A</option><option value="B">Clave: B</option>
             <option value="C">Clave: C</option><option value="D">Clave: D</option>
           </select>
+        </div>
+
+        <!-- Opciones para Entrelazar Conceptos -->
+        <div id="q${i}-match-options" class="hidden bg-indigo-50 p-3 rounded border border-indigo-200 mb-2">
+          <p class="text-sm font-bold text-indigo-800 mb-2">Clave correcta (Ingresa la letra para cada número):</p>
+          <div class="flex justify-around items-center">
+            <div><span class="font-bold">1-</span><input type="text" id="q${i}-m1" class="w-10 text-center uppercase font-bold border border-gray-400 rounded" maxlength="1"></div>
+            <div><span class="font-bold">2-</span><input type="text" id="q${i}-m2" class="w-10 text-center uppercase font-bold border border-gray-400 rounded" maxlength="1"></div>
+            <div><span class="font-bold">3-</span><input type="text" id="q${i}-m3" class="w-10 text-center uppercase font-bold border border-gray-400 rounded" maxlength="1"></div>
+            <div><span class="font-bold">4-</span><input type="text" id="q${i}-m4" class="w-10 text-center uppercase font-bold border border-gray-400 rounded" maxlength="1"></div>
+          </div>
         </div>
         
         <!-- Mensaje para Respuesta Abierta -->
@@ -103,21 +115,21 @@ function toggleQuestionType(index) {
   const type = document.getElementById(`q${index}-type`).value;
   const multipleDiv = document.getElementById(`q${index}-multiple-options`);
   const textDiv = document.getElementById(`q${index}-text-options`);
+  const matchDiv = document.getElementById(`q${index}-match-options`);
   
-  if (type === 'text') {
-    multipleDiv.classList.add('hidden');
-    textDiv.classList.remove('hidden');
-    // Quitar "required" de las opciones ocultas para que deje guardar
-    ['oA', 'oB', 'oC', 'oD', 'correct'].forEach(id => {
-      document.getElementById(`q${index}-${id}`).removeAttribute('required');
-    });
-  } else {
+  multipleDiv.classList.add('hidden');
+  textDiv.classList.add('hidden');
+  matchDiv.classList.add('hidden');
+  
+  ['oA', 'oB', 'oC', 'oD', 'correct'].forEach(id => document.getElementById(`q${index}-${id}`).removeAttribute('required'));
+
+  if (type === 'multiple') {
     multipleDiv.classList.remove('hidden');
-    textDiv.classList.add('hidden');
-    // Volver a requerir
-    ['oA', 'oB', 'oC', 'oD', 'correct'].forEach(id => {
-      document.getElementById(`q${index}-${id}`).setAttribute('required', 'true');
-    });
+    ['oA', 'oB', 'oC', 'oD', 'correct'].forEach(id => document.getElementById(`q${index}-${id}`).setAttribute('required', 'true'));
+  } else if (type === 'text') {
+    textDiv.classList.remove('hidden');
+  } else if (type === 'match') {
+    matchDiv.classList.remove('hidden');
   }
 }
 
@@ -129,26 +141,34 @@ async function submitExamCreation() {
   let preguntas = [];
   for (let i = 1; i <= 5; i++) {
     const tipo = document.getElementById(`q${i}-type`).value;
+    const textoPregunta = document.getElementById(`q${i}-text`).value;
     
     if (tipo === 'multiple') {
       preguntas.push({
-        id: i, 
-        tipo: 'multiple',
-        texto: document.getElementById(`q${i}-text`).value,
+        id: i, tipo: 'multiple', texto: textoPregunta,
         opciones: {
           A: document.getElementById(`q${i}-oA`).value, B: document.getElementById(`q${i}-oB`).value,
           C: document.getElementById(`q${i}-oC`).value, D: document.getElementById(`q${i}-oD`).value
         },
         correcta: document.getElementById(`q${i}-correct`).value
       });
-    } else {
+    } else if (tipo === 'match') {
+      const m1 = document.getElementById(`q${i}-m1`).value.toUpperCase();
+      const m2 = document.getElementById(`q${i}-m2`).value.toUpperCase();
+      const m3 = document.getElementById(`q${i}-m3`).value.toUpperCase();
+      const m4 = document.getElementById(`q${i}-m4`).value.toUpperCase();
+      
+      let corr = [];
+      if(m1) corr.push(`1-${m1}`);
+      if(m2) corr.push(`2-${m2}`);
+      if(m3) corr.push(`3-${m3}`);
+      if(m4) corr.push(`4-${m4}`);
+      
       preguntas.push({
-        id: i, 
-        tipo: 'text',
-        texto: document.getElementById(`q${i}-text`).value,
-        opciones: null,
-        correcta: 'MANUAL'
+        id: i, tipo: 'match', texto: textoPregunta, opciones: null, correcta: corr.join(', ')
       });
+    } else {
+      preguntas.push({ id: i, tipo: 'text', texto: textoPregunta, opciones: null, correcta: 'MANUAL' });
     }
   }
 
@@ -222,12 +242,16 @@ function generarPDFDocente(codigoSala, resultados, examen) {
       doc.setFont("helvetica", "normal");
       const respAlumno = res.respuestas ? res.respuestas[q.id] : "Sin responder";
       
-      if (q.tipo === 'multiple' || !q.tipo) {
+      if (q.tipo === 'multiple' || !q.tipo || q.tipo === 'match') {
           const esCorrecto = (respAlumno === q.correcta);
-          const opcionesDisponibles = q.opciones || {}; 
-          const textoAlternativaAlumno = opcionesDisponibles[respAlumno] ? opcionesDisponibles[respAlumno] : "";
-          const textoRespAlumno = (respAlumno && respAlumno !== "Sin responder" && !respAlumno.startsWith("ANULADA")) ? `${respAlumno}) ${textoAlternativaAlumno}` : respAlumno;
+          let textoRespAlumno = respAlumno;
           
+          if ((q.tipo === 'multiple' || !q.tipo) && respAlumno && respAlumno !== "Sin responder" && !respAlumno.startsWith("ANULADA")) {
+             const opcionesDisponibles = q.opciones || {}; 
+             const textoAlternativaAlumno = opcionesDisponibles[respAlumno] ? opcionesDisponibles[respAlumno] : "";
+             textoRespAlumno = `${respAlumno}) ${textoAlternativaAlumno}`;
+          }
+
           if (respAlumno && respAlumno.startsWith("ANULADA")) {
               doc.setTextColor(192, 57, 43);
               const splitAnulada = doc.splitTextToSize(`Respuesta: ${respAlumno}`, 165);
@@ -235,16 +259,22 @@ function generarPDFDocente(codigoSala, resultados, examen) {
               y += (splitAnulada.length * 6) + 4;
           } else if (esCorrecto) {
             doc.setTextColor(39, 174, 96);
-            const splitResp = doc.splitTextToSize(`Respuesta: ${textoRespAlumno}   ( ✓ Correcto )`, 165);
+            const splitResp = doc.splitTextToSize(`Respuesta del alumno: ${textoRespAlumno}   ( ✓ Correcto )`, 165);
             doc.text(splitResp, 25, y);
             y += (splitResp.length * 6) + 2;
           } else {
             doc.setTextColor(192, 57, 43);
-            const splitResp = doc.splitTextToSize(`Respuesta: ${textoRespAlumno}   ( X Incorrecto )`, 165);
+            const splitResp = doc.splitTextToSize(`Respuesta del alumno: ${textoRespAlumno}   ( X Incorrecto )`, 165);
             doc.text(splitResp, 25, y);
             y += (splitResp.length * 6);
             doc.setTextColor(0, 0, 0);
-            doc.text(`Clave correcta: ${q.correcta}) ${opcionesDisponibles[q.correcta] || ''}`, 25, y);
+            
+            let textoCorrecto = q.correcta;
+            if(q.tipo === 'multiple' || !q.tipo){
+                const opcionesDisponibles = q.opciones || {};
+                textoCorrecto = `${q.correcta}) ${opcionesDisponibles[q.correcta] || ''}`;
+            }
+            doc.text(`Clave correcta: ${textoCorrecto}`, 25, y);
             y += 8;
           }
       } else {
@@ -339,16 +369,31 @@ function renderCurrentQuestion() {
       <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="C" style="display:none;"> C) ${opciones.C || ''}</label>
       <label class="option-label" onclick="selectOption(this)"><input type="radio" name="resp_${q.id}" value="D" style="display:none;"> D) ${opciones.D || ''}</label>
     `;
+  } else if (q.tipo === 'match') {
+    interactableHTML = `
+      <div class="bg-gray-50 p-4 rounded-lg border border-indigo-200 shadow-sm">
+        <p class="font-bold text-sm text-gray-700 mb-4 text-center">Escribe la letra correspondiente a cada número:</p>
+        <div class="flex justify-around items-center">
+          <div class="text-center"><span class="font-bold text-lg block mb-1">1</span><input type="text" id="resp_m1_${q.id}" class="w-12 h-10 border-2 border-indigo-300 rounded text-center font-bold uppercase text-lg" maxlength="1"></div>
+          <div class="text-center"><span class="font-bold text-lg block mb-1">2</span><input type="text" id="resp_m2_${q.id}" class="w-12 h-10 border-2 border-indigo-300 rounded text-center font-bold uppercase text-lg" maxlength="1"></div>
+          <div class="text-center"><span class="font-bold text-lg block mb-1">3</span><input type="text" id="resp_m3_${q.id}" class="w-12 h-10 border-2 border-indigo-300 rounded text-center font-bold uppercase text-lg" maxlength="1"></div>
+          <div class="text-center"><span class="font-bold text-lg block mb-1">4</span><input type="text" id="resp_m4_${q.id}" class="w-12 h-10 border-2 border-indigo-300 rounded text-center font-bold uppercase text-lg" maxlength="1"></div>
+        </div>
+      </div>
+    `;
   } else {
     interactableHTML = `
-      <textarea id="resp_text_${q.id}" rows="6" class="w-full border-2 border-indigo-300 rounded-lg p-3 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Escribe tu respuesta aquí..."></textarea>
+      <textarea id="resp_text_${q.id}" rows="6" class="w-full border-2 border-indigo-300 rounded-lg p-3 text-gray-700" placeholder="Escribe tu respuesta aquí..."></textarea>
     `;
   }
+
+  // Pre-formatear el texto de la pregunta para respetar saltos de línea visualmente
+  const textoPreguntaFormat = q.texto.replace(/\n/g, '<br>');
 
   container.innerHTML = `
     <div class="question-container active">
       <h4 style="color: var(--accent); margin-bottom: 15px;">Pregunta ${currentQuestionIndex + 1} de ${totalQuestions}</h4>
-      <p style="font-size: 18px; margin-bottom: 20px;"><strong>${q.texto}</strong></p>
+      <p style="font-size: 16px; margin-bottom: 20px;"><strong>${textoPreguntaFormat}</strong></p>
       ${interactableHTML}
     </div>`;
 
@@ -396,6 +441,19 @@ function nextQuestion() {
   if (q.tipo === 'multiple' || !q.tipo) {
     const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
     temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
+  } else if (q.tipo === 'match') {
+    const m1 = document.getElementById(`resp_m1_${q.id}`);
+    const m2 = document.getElementById(`resp_m2_${q.id}`);
+    const m3 = document.getElementById(`resp_m3_${q.id}`);
+    const m4 = document.getElementById(`resp_m4_${q.id}`);
+    
+    let respArr = [];
+    if(m1 && m1.value.trim()) respArr.push(`1-${m1.value.trim().toUpperCase()}`);
+    if(m2 && m2.value.trim()) respArr.push(`2-${m2.value.trim().toUpperCase()}`);
+    if(m3 && m3.value.trim()) respArr.push(`3-${m3.value.trim().toUpperCase()}`);
+    if(m4 && m4.value.trim()) respArr.push(`4-${m4.value.trim().toUpperCase()}`);
+    
+    temporalRespuestas[q.id] = respArr.length > 0 ? respArr.join(', ') : "Sin responder";
   } else {
     const textoArea = document.getElementById(`resp_text_${q.id}`);
     temporalRespuestas[q.id] = textoArea ? textoArea.value.trim() : "Sin responder";
@@ -422,6 +480,17 @@ async function finishExam() {
   if (q.tipo === 'multiple' || !q.tipo) {
     const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
     temporalRespuestas[q.id] = seleccion ? seleccion.value : "Sin responder";
+  } else if (q.tipo === 'match') {
+    const m1 = document.getElementById(`resp_m1_${q.id}`);
+    const m2 = document.getElementById(`resp_m2_${q.id}`);
+    const m3 = document.getElementById(`resp_m3_${q.id}`);
+    const m4 = document.getElementById(`resp_m4_${q.id}`);
+    let respArr = [];
+    if(m1 && m1.value.trim()) respArr.push(`1-${m1.value.trim().toUpperCase()}`);
+    if(m2 && m2.value.trim()) respArr.push(`2-${m2.value.trim().toUpperCase()}`);
+    if(m3 && m3.value.trim()) respArr.push(`3-${m3.value.trim().toUpperCase()}`);
+    if(m4 && m4.value.trim()) respArr.push(`4-${m4.value.trim().toUpperCase()}`);
+    temporalRespuestas[q.id] = respArr.length > 0 ? respArr.join(', ') : "Sin responder";
   } else {
     const textoArea = document.getElementById(`resp_text_${q.id}`);
     temporalRespuestas[q.id] = textoArea ? textoArea.value.trim() : "Sin responder";
@@ -431,19 +500,50 @@ async function finishExam() {
 
   // Evaluar las respuestas acumuladas vs la clave
   currentExamData.forEach(pregunta => {
+    const valorAlumno = temporalRespuestas[pregunta.id];
+    const claveCorrecta = pregunta.correcta;
+
     if (pregunta.tipo === 'multiple' || !pregunta.tipo) {
-      const valor = temporalRespuestas[pregunta.id];
-      if (valor === pregunta.correcta) puntaje += 4; 
+      // Calificación tradicional (0 o 4 puntos)
+      if (valorAlumno === claveCorrecta) {
+        puntaje += 4; 
+      }
+    } else if (pregunta.tipo === 'match') {
+      // Calificación fraccionada proporcional para Entrelazar Conceptos
+      if (valorAlumno && valorAlumno !== "Sin responder" && !valorAlumno.startsWith("ANULADA")) {
+        const arrClave = claveCorrecta.split(', ');
+        const arrAlumno = valorAlumno.split(', ');
+        
+        const totalConceptos = arrClave.length; 
+        if (totalConceptos > 0) {
+          const valorPorAcierto = 4 / totalConceptos; 
+          let aciertos = 0;
+
+          // Contar aciertos comparando cada par
+          arrClave.forEach(parClave => {
+            if (arrAlumno.includes(parClave)) {
+              aciertos++;
+            }
+          });
+
+          puntaje += (aciertos * valorPorAcierto);
+        }
+      }
     }
+    // Las preguntas de tipo 'text' (abiertas) no suman puntaje automático
   });
+
+  // Redondear el puntaje total a 1 decimal (ej: 2.6) si no es un número entero
+  puntaje = Math.round(puntaje * 10) / 10;
 
   // Aplicar las penalizaciones acumuladas por trampa
   if (gameState.penalidadTrampa) {
       puntaje += gameState.penalidadTrampa;
   }
 
-  // Asegurar que el puntaje no sea negativo
+  // Asegurar que el puntaje final no sea negativo ni tenga muchos decimales
   if (puntaje < 0) puntaje = 0;
+  puntaje = Math.round(puntaje * 10) / 10;
 
   showLoader(true);
   
@@ -534,13 +634,19 @@ function generarPDFExamenBlanco(codigoSala, examen) {
     if (q.tipo === 'multiple' || !q.tipo) {
       const opcionesClaves = ['A', 'B', 'C', 'D'];
       const opcionesDisponibles = q.opciones || {}; 
-      
       opcionesClaves.forEach(opt => {
         const textoOpcion = `${opt}) ${opcionesDisponibles[opt] ? opcionesDisponibles[opt] : '_________'}`;
         const splitOpcion = doc.splitTextToSize(textoOpcion, 160);
         doc.text(splitOpcion, 25, y);
         y += (splitOpcion.length * 6) + 2;
       });
+    } else if (q.tipo === 'match') {
+      doc.setTextColor(41, 128, 185);
+      doc.text("Relaciona los conceptos colocando la letra (A, B, C, D):", 25, y);
+      y += 8;
+      doc.setTextColor(0, 0, 0);
+      doc.text("[ 1 ] - _____      [ 2 ] - _____      [ 3 ] - _____      [ 4 ] - _____", 25, y);
+      y += 10;
     } else {
       // Pregunta abierta: líneas para escribir
       doc.text("Respuesta:", 25, y);
