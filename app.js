@@ -226,12 +226,13 @@ function generarPDFDocente(codigoSala, resultados, examen) {
           const esCorrecto = (respAlumno === q.correcta);
           const opcionesDisponibles = q.opciones || {}; 
           const textoAlternativaAlumno = opcionesDisponibles[respAlumno] ? opcionesDisponibles[respAlumno] : "";
-          const textoRespAlumno = (respAlumno && respAlumno !== "Sin responder" && respAlumno !== "ANULADA (Infracción)") ? `${respAlumno}) ${textoAlternativaAlumno}` : respAlumno;
+          const textoRespAlumno = (respAlumno && respAlumno !== "Sin responder" && !respAlumno.startsWith("ANULADA")) ? `${respAlumno}) ${textoAlternativaAlumno}` : respAlumno;
           
-          if (respAlumno === "ANULADA (Infracción)") {
+          if (respAlumno && respAlumno.startsWith("ANULADA")) {
               doc.setTextColor(192, 57, 43);
-              doc.text(`Respuesta: ANULADA (Infracción Anti-Trampa)`, 25, y);
-              y += 10;
+              const splitAnulada = doc.splitTextToSize(`Respuesta: ${respAlumno}`, 165);
+              doc.text(splitAnulada, 25, y);
+              y += (splitAnulada.length * 6) + 4;
           } else if (esCorrecto) {
             doc.setTextColor(39, 174, 96);
             const splitResp = doc.splitTextToSize(`Respuesta: ${textoRespAlumno}   ( ✓ Correcto )`, 165);
@@ -562,18 +563,18 @@ function generarPDFExamenBlanco(codigoSala, examen) {
   doc.save(`Examen_Blanco_Sala_${codigoSala}.pdf`);
 }
 
-// ===== MOTOR ANTI-TRAMPAS (ADVERTENCIA LIMPIA EN LA 1RA, CASTIGO DESDE LA 2DA) =====
+// ===== MOTOR ANTI-TRAMPAS (REGISTRO TÉCNICO DETALLADO) =====
 // 1. Detectar si minimiza o cambia de pestaña
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && isExamActive) {
-    handleCheatWarning("Cambiaste de pestaña o minimizaste el navegador.");
+    handleCheatWarning("El navegador fue minimizado o se cambió a una pestaña oculta.");
   }
 });
 
 // 2. Detectar si abre otra app en pantalla dividida o pierde el foco
 window.addEventListener("blur", () => {
   if (isExamActive) {
-    handleCheatWarning("Saliste de la pantalla de la evaluación.");
+    handleCheatWarning("El examen perdió el foco principal (posible apertura de otra aplicación, menú del celular o pantalla dividida).");
   }
 });
 
@@ -585,37 +586,33 @@ document.addEventListener('paste', event => { if(isExamActive) event.preventDefa
 function handleCheatWarning(motivo) {
   cheatWarnings++;
   
-  // PRIMERA INFRACCIÓN: Solo advertencia, no hay penalidad ni salto
+  // PRIMERA INFRACCIÓN: Solo advertencia
   if (cheatWarnings === 1) {
-    alert(`¡ADVERTENCIA ANTI-TRAMPA (1/2)!\nMotivo: ${motivo}\n\nEstá prohibido salir de la ventana de la evaluación. A tu próxima infracción, la pregunta en la que estés será ANULADA y se restarán 2 puntos de tu calificación global.`);
-    return; // Detiene la función aquí para no castigar aún
+    alert(`¡ADVERTENCIA ANTI-TRAMPA (1/2)!\nDetalle: ${motivo}\n\nEstá prohibido salir de la ventana de la evaluación. A tu próxima infracción, la pregunta en la que estés será ANULADA y se restarán 2 puntos de tu calificación global.`);
+    return;
   }
 
-  // SEGUNDA Y TERCERA INFRACCIÓN: Se aplica la penalidad
-  // 1. Guardar la pregunta actual como anulada
+  // SEGUNDA Y TERCERA INFRACCIÓN: Anulación documentada
   const qActual = currentExamData[currentQuestionIndex];
-  temporalRespuestas[qActual.id] = "ANULADA (Infracción)";
+  temporalRespuestas[qActual.id] = `ANULADA (${motivo})`;
 
-  // 2. Sumar 2 puntos negativos al contador global
   if (!gameState.penalidadTrampa) gameState.penalidadTrampa = 0;
   gameState.penalidadTrampa -= 2;
 
-  // 3. Evaluar si es la segunda (salto) o tercera (cierre total)
   if (cheatWarnings === 2) {
-    alert(`¡ADVERTENCIA ANTI-TRAMPA (2/2)!\nMotivo: ${motivo}\n\nLa pregunta actual ha sido ANULADA y se han RESTADO 2 puntos de tu calificación global. A tu próxima infracción tu examen será cancelado por completo.`);
+    alert(`¡ADVERTENCIA ANTI-TRAMPA (2/2)!\nDetalle: ${motivo}\n\nLa pregunta actual ha sido ANULADA y se han RESTADO 2 puntos de tu calificación global. A tu próxima infracción tu examen será cancelado por completo.`);
     
-    // Forzar el salto a la siguiente pregunta si no es la última
     if (currentQuestionIndex < totalQuestions - 1) {
       clearInterval(timerInterval);
       currentQuestionIndex++;
       renderCurrentQuestion();
     } else {
-      finishExam(); // Si hizo trampa en la última pregunta, se envía
+      finishExam(); 
     }
   } 
   else if (cheatWarnings >= 3) {
-    alert(`¡INFRACCIÓN CRÍTICA!\nMotivo: ${motivo}\n\nHas superado el límite de advertencias permitidas. Tu evaluación ha sido cancelada.\nSe han descontado 2 puntos adicionales por esta infracción.`);
-    finishExam(); // Fuerza el envío inmediato y cierre de la evaluación
+    alert(`¡INFRACCIÓN CRÍTICA!\nDetalle: ${motivo}\n\nHas superado el límite de advertencias permitidas. Tu evaluación ha sido cancelada.\nSe han descontado 2 puntos adicionales por esta infracción.`);
+    finishExam(); 
   }
 }
 
