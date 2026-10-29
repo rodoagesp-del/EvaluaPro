@@ -1,4 +1,4 @@
-const CACHE_NAME = 'evalua-cache-v12';
+const CACHE_NAME = 'evalua-cache-v13';
 const urlsToCache = [
   './',
   './index.html',
@@ -12,7 +12,7 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
   );
-  self.skipWaiting(); // Fuerza la activación inmediata del nuevo SW
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
@@ -23,7 +23,7 @@ self.addEventListener('activate', event => {
       );
     })
   );
-  self.clients.claim(); // Toma control de las pestañas abiertas
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {

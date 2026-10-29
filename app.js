@@ -5,6 +5,9 @@ let currentStudentName = '', currentRoomCode = '', currentExamData = [];
 let timeRemaining = 0, timerInterval;
 let myLastPuntaje = 0, myLastRespuestas = {};
 
+// ===== VARIABLE DEL CAPTCHA =====
+let currentCaptchaAnswer = 0;
+
 // ===== ESTADO DEL JUEGO (PARA PENALIZACIONES) =====
 let gameState = {
   penalidadTrampa: 0
@@ -12,18 +15,18 @@ let gameState = {
 
 // ===== SISTEMA DE TEMÁTICAS ESTACIONALES =====
 function applySeasonalTheme() {
-  const month = new Date().getMonth() + 1; // Enero es 1, Octubre 10, Diciembre 12
+  const month = new Date().getMonth() + 1;
   const body = document.body;
   const title = document.getElementById('app-title');
   
-  body.className = ''; // Limpiar temas
+  body.className = '';
   if (month === 10) {
     body.classList.add('theme-halloween');
     title.innerText = "🎃 EvaluaPro Halloween 🦇";
   } else if (month === 12) {
     body.classList.add('theme-christmas');
     title.innerText = "🎄 EvaluaPro Navideño ❄️";
-  } else if (month >= 9 && month <= 11) { // Septiembre (Primavera sur)
+  } else if (month >= 9 && month <= 11) {
     body.classList.add('theme-spring');
     title.innerText = "🌻 EvaluaPro Primavera 🦋";
   } else {
@@ -79,7 +82,6 @@ function renderQuestionsForm() {
         
         <textarea id="q${i}-text" rows="2" class="w-full p-2 border rounded mb-2" placeholder="Enunciado de la Pregunta" required></textarea>
         
-        <!-- Opciones para Opción Múltiple -->
         <div id="q${i}-multiple-options">
           <input type="text" id="q${i}-oA" placeholder="A)" required>
           <input type="text" id="q${i}-oB" placeholder="B)" required>
@@ -91,7 +93,6 @@ function renderQuestionsForm() {
           </select>
         </div>
 
-        <!-- Opciones para Entrelazar Conceptos (NUEVO FORMATO COLUMNAS) -->
         <div id="q${i}-match-options" class="hidden bg-indigo-50 p-3 rounded border border-indigo-200 mb-2">
           <p class="text-sm font-bold text-indigo-800 mb-2">Construye las columnas para relacionar:</p>
           
@@ -121,7 +122,6 @@ function renderQuestionsForm() {
           </div>
         </div>
         
-        <!-- Mensaje para Respuesta Abierta -->
         <div id="q${i}-text-options" class="hidden">
           <p class="text-sm text-gray-600 italic mb-2">El alumno responderá con un cuadro de texto. Esta pregunta debe ser revisada manualmente por el docente en el PDF.</p>
         </div>
@@ -129,7 +129,6 @@ function renderQuestionsForm() {
   }
 }
 
-// Nueva función para alternar la vista del creador de preguntas
 function toggleQuestionType(index) {
   const type = document.getElementById(`q${index}-type`).value;
   const multipleDiv = document.getElementById(`q${index}-multiple-options`);
@@ -172,7 +171,6 @@ async function submitExamCreation() {
         correcta: document.getElementById(`q${i}-correct`).value
       });
     } else if (tipo === 'match') {
-      // Recoger los conceptos y definiciones
       const c1 = document.getElementById(`q${i}-m-c1`).value;
       const c2 = document.getElementById(`q${i}-m-c2`).value;
       const c3 = document.getElementById(`q${i}-m-c3`).value;
@@ -183,7 +181,6 @@ async function submitExamCreation() {
       const d3 = document.getElementById(`q${i}-m-d3`).value;
       const d4 = document.getElementById(`q${i}-m-d4`).value;
 
-      // Recoger las claves
       const m1 = document.getElementById(`q${i}-m1`).value.toUpperCase();
       const m2 = document.getElementById(`q${i}-m2`).value.toUpperCase();
       const m3 = document.getElementById(`q${i}-m3`).value.toUpperCase();
@@ -198,7 +195,7 @@ async function submitExamCreation() {
       preguntas.push({
         id: i, tipo: 'match', texto: textoPregunta, 
         opciones: {
-            conceptos: [c1, c2, c3, c4].filter(Boolean), // Filtra los vacíos
+            conceptos: [c1, c2, c3, c4].filter(Boolean),
             definiciones: [d1, d2, d3, d4].filter(Boolean)
         }, 
         correcta: corr.join(', ')
@@ -242,7 +239,6 @@ function generarPDFDocente(codigoSala, resultados, examen) {
   resultados.forEach((res, index) => {
     if (index > 0) doc.addPage(); 
 
-    // Cabecera del examen tipo físico
     doc.setFontSize(22);
     doc.setTextColor(41, 128, 185);
     doc.setFont("helvetica", "bold");
@@ -254,7 +250,6 @@ function generarPDFDocente(codigoSala, resultados, examen) {
     doc.text(`Alumno: ${res.alumno || 'Desconocido'}`, 20, 35);
     doc.text(`Código de Sala: ${codigoSala}`, 20, 42);
     
-    // Nota gigante en la esquina superior derecha
     doc.setFontSize(16);
     doc.setTextColor(192, 57, 43); 
     doc.setFont("helvetica", "bold");
@@ -314,15 +309,14 @@ function generarPDFDocente(codigoSala, resultados, examen) {
             y += 8;
           }
       } else {
-          // Pregunta Abierta
-          doc.setTextColor(41, 128, 185); // Azul para diferenciar respuestas manuales
+          doc.setTextColor(41, 128, 185);
           doc.text(`Respuesta libre del alumno:`, 25, y);
           y += 6;
           doc.setTextColor(0, 0, 0);
           const splitLibre = doc.splitTextToSize(`"${respAlumno}"`, 160);
           doc.text(splitLibre, 25, y);
           y += (splitLibre.length * 6) + 4;
-          doc.setTextColor(142, 68, 173); // Morado para nota manual
+          doc.setTextColor(142, 68, 173);
           doc.text(`[   ] Evaluación Manual Docente`, 25, y);
           y += 8;
       }
@@ -357,26 +351,67 @@ async function loginStudent() {
 
   if (res && res.status === 'success') {
     currentStudentName = name; currentRoomCode = code; currentExamData = res.examen;
-    resTempMinutos = res.minutos; // Guardamos los minutos totales
-    startExam();
+    resTempMinutos = res.minutos;
+    showAgreementView(); // EN LUGAR DE startExam();
   } else alert("Sala inactiva.");
+}
+
+// ===== FUNCIONES DEL ACUERDO Y VALIDACIÓN =====
+function showAgreementView() {
+  // Generar CAPTCHA Matemático simple (Sumas o restas básicas)
+  const num1 = Math.floor(Math.random() * 10) + 1;
+  const num2 = Math.floor(Math.random() * 10) + 1;
+  const isAddition = Math.random() > 0.5;
+  
+  if (isAddition) {
+    currentCaptchaAnswer = num1 + num2;
+    document.getElementById('captcha-question').innerText = `${num1} + ${num2} =`;
+  } else {
+    const max = Math.max(num1, num2);
+    const min = Math.min(num1, num2);
+    currentCaptchaAnswer = max - min;
+    document.getElementById('captcha-question').innerText = `${max} - ${min} =`;
+  }
+  
+  // Limpiar campos por si es un reintento
+  document.getElementById('captcha-answer').value = '';
+  document.getElementById('agreement-checkbox').checked = false;
+  
+  showView('view-agreement');
+}
+
+function verifyAndStartExam() {
+  const isChecked = document.getElementById('agreement-checkbox').checked;
+  const userAnswer = parseInt(document.getElementById('captcha-answer').value);
+  
+  if (!isChecked) {
+    alert("Debes aceptar los términos y condiciones (marcando la casilla inferior) para poder iniciar el examen.");
+    return;
+  }
+  
+  if (isNaN(userAnswer) || userAnswer !== currentCaptchaAnswer) {
+    alert("La respuesta del CAPTCHA matemático es incorrecta. Demuestra que eres tú resolviendo la nueva operación.");
+    showAgreementView(); // Recarga un nuevo captcha por seguridad
+    return;
+  }
+  
+  // Si superó el captcha y aceptó los términos, inicia la prueba y el cronómetro
+  startExam();
 }
 
 function startExam() {
   document.getElementById('display-student').innerText = currentStudentName;
   
-  // Dividir el tiempo total en partes iguales (minutos a segundos)
   totalQuestions = currentExamData.length;
   const totalSeconds = parseInt(resTempMinutos) * 60; 
   timePerQuestion = Math.floor(totalSeconds / totalQuestions);
   
   currentQuestionIndex = 0;
-  temporalRespuestas = {}; // Reiniciar respuestas
+  temporalRespuestas = {};
   
-  // INICIAR VIGILANCIA ANTI-TRAMPA
   cheatWarnings = 0;
   isExamActive = true;
-  gameState.penalidadTrampa = 0; // Reiniciar penalizaciones
+  gameState.penalidadTrampa = 0;
   
   showView('view-exam');
   renderCurrentQuestion();
@@ -471,7 +506,6 @@ function updateTimerDisplay() {
   document.getElementById('timer').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-// Resaltar visualmente la opción seleccionada por el alumno
 function selectOption(labelElement) {
   const container = document.getElementById('student-questions-container');
   const labels = container.querySelectorAll('.option-label');
@@ -513,7 +547,6 @@ function nextQuestion() {
 }
 
 async function finishExam() {
-  // 1. BLOQUEAR EL BOTÓN INMEDIATAMENTE
   const btnFinish = document.getElementById('btn-finish-exam');
   if (btnFinish.disabled) return; 
   
@@ -522,9 +555,8 @@ async function finishExam() {
   btnFinish.innerHTML = '⏳ Enviando Evaluación...';
   
   clearInterval(timerInterval);
-  isExamActive = false; // DETENER VIGILANCIA ANTI-TRAMPA
+  isExamActive = false;
   
-  // Guardar la respuesta de la última pregunta en pantalla
   const q = currentExamData[currentQuestionIndex];
   if (q.tipo === 'multiple' || !q.tipo) {
     const seleccion = document.querySelector(`input[name="resp_${q.id}"]:checked`);
@@ -547,18 +579,15 @@ async function finishExam() {
 
   let puntaje = 0;
 
-  // Evaluar las respuestas acumuladas vs la clave
   currentExamData.forEach(pregunta => {
     const valorAlumno = temporalRespuestas[pregunta.id];
     const claveCorrecta = pregunta.correcta;
 
     if (pregunta.tipo === 'multiple' || !pregunta.tipo) {
-      // Calificación tradicional (0 o 4 puntos)
       if (valorAlumno === claveCorrecta) {
         puntaje += 4; 
       }
     } else if (pregunta.tipo === 'match') {
-      // Calificación fraccionada proporcional para Entrelazar Conceptos
       if (valorAlumno && valorAlumno !== "Sin responder" && !valorAlumno.startsWith("ANULADA")) {
         const arrClave = claveCorrecta.split(', ');
         const arrAlumno = valorAlumno.split(', ');
@@ -568,7 +597,6 @@ async function finishExam() {
           const valorPorAcierto = 4 / totalConceptos; 
           let aciertos = 0;
 
-          // Contar aciertos comparando cada par
           arrClave.forEach(parClave => {
             if (arrAlumno.includes(parClave)) {
               aciertos++;
@@ -579,18 +607,14 @@ async function finishExam() {
         }
       }
     }
-    // Las preguntas de tipo 'text' (abiertas) no suman puntaje automático
   });
 
-  // Redondear el puntaje total a 1 decimal (ej: 2.6) si no es un número entero
   puntaje = Math.round(puntaje * 10) / 10;
 
-  // Aplicar las penalizaciones acumuladas por trampa
   if (gameState.penalidadTrampa) {
       puntaje += gameState.penalidadTrampa;
   }
 
-  // Asegurar que el puntaje final no sea negativo ni tenga muchos decimales
   if (puntaje < 0) puntaje = 0;
   puntaje = Math.round(puntaje * 10) / 10;
 
@@ -613,7 +637,6 @@ async function finishExam() {
         throw new Error("El servidor devolvió un error al guardar el examen.");
       }
   } catch (error) {
-      // 2. REHABILITAR EL BOTÓN SI EL ENVÍO FALLA
       showLoader(false);
       btnFinish.disabled = false;
       btnFinish.innerHTML = originalText;
@@ -627,7 +650,6 @@ async function downloadBlankExam() {
   if(!code) return alert("Ingresa un código de sala para descargar el examen en blanco.");
 
   showLoader(true);
-  // Reutilizamos el endpoint de obtener_resultados porque nos devuelve el 'examen' íntegro
   const res = await postData({ action: 'obtener_resultados', codigoSala: code });
   showLoader(false);
 
@@ -648,7 +670,6 @@ function generarPDFExamenBlanco(codigoSala, examen) {
       return;
   }
 
-  // Cabecera del examen físico
   doc.setFontSize(20);
   doc.setTextColor(0, 0, 0);
   doc.setFont("helvetica", "bold");
@@ -665,18 +686,15 @@ function generarPDFExamenBlanco(codigoSala, examen) {
 
   let y = 65;
   
-  // Imprimir preguntas y alternativas completas
   examen.forEach((q, qIndex) => {
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
     
-    // Pregunta
     const preguntaTexto = q.texto ? q.texto : "Pregunta no encontrada";
     const splitQuestion = doc.splitTextToSize(`${qIndex + 1}. ${preguntaTexto}`, 170);
     doc.text(splitQuestion, 20, y);
     y += (splitQuestion.length * 6) + 2;
     
-    // Alternativas completas (solo para opción múltiple)
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
     
@@ -697,7 +715,6 @@ function generarPDFExamenBlanco(codigoSala, examen) {
       doc.text("[ 1 ] - _____      [ 2 ] - _____      [ 3 ] - _____      [ 4 ] - _____", 25, y);
       y += 10;
     } else {
-      // Pregunta abierta: líneas para escribir
       doc.text("Respuesta:", 25, y);
       y += 8;
       for (let l = 0; l < 4; l++) {
@@ -706,9 +723,8 @@ function generarPDFExamenBlanco(codigoSala, examen) {
       }
     }
     
-    y += 8; // Espacio extra entre preguntas
+    y += 8;
     
-    // Salto de página preventivo para evitar que se corte el texto
     if (y > 270) {
       doc.addPage();
       y = 20;
@@ -719,21 +735,18 @@ function generarPDFExamenBlanco(codigoSala, examen) {
 }
 
 // ===== MOTOR ANTI-TRAMPAS (REGISTRO TÉCNICO DETALLADO) =====
-// 1. Detectar si minimiza o cambia de pestaña
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && isExamActive) {
     handleCheatWarning("El navegador fue minimizado o se cambió a una pestaña oculta.");
   }
 });
 
-// 2. Detectar si abre otra app en pantalla dividida o pierde el foco
 window.addEventListener("blur", () => {
   if (isExamActive) {
     handleCheatWarning("El examen perdió el foco principal (posible apertura de otra aplicación, menú del celular o pantalla dividida).");
   }
 });
 
-// 3. Bloqueos de teclado y mouse (solo activos durante el examen)
 document.addEventListener('contextmenu', event => { if(isExamActive) event.preventDefault(); });
 document.addEventListener('copy', event => { if(isExamActive) event.preventDefault(); });
 document.addEventListener('paste', event => { if(isExamActive) event.preventDefault(); });
@@ -741,13 +754,11 @@ document.addEventListener('paste', event => { if(isExamActive) event.preventDefa
 function handleCheatWarning(motivo) {
   cheatWarnings++;
   
-  // PRIMERA INFRACCIÓN: Solo advertencia
   if (cheatWarnings === 1) {
     alert(`¡ADVERTENCIA ANTI-TRAMPA (1/2)!\nDetalle: ${motivo}\n\nEstá prohibido salir de la ventana de la evaluación. A tu próxima infracción, la pregunta en la que estés será ANULADA y se restarán 2 puntos de tu calificación global.`);
     return;
   }
 
-  // SEGUNDA Y TERCERA INFRACCIÓN: Anulación documentada
   const qActual = currentExamData[currentQuestionIndex];
   temporalRespuestas[qActual.id] = `ANULADA (${motivo})`;
 
